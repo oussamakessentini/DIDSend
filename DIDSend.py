@@ -2,12 +2,10 @@ import sys
 import os
 from UDS.UDS_Frame import UDS_Frame 
 
-Pcan = UDS_Frame(0x69B, 0x6B0, False, True)
+Pcan = UDS_Frame(0x18DADBF1, 0x18DAF1DB, True, False)
 
-Pcan.WriteMessages(Pcan.TxId, [2, 0x3E, 0x00])
-# print(Pcan.ReadMessages())
-# Pcan.StartSession(3)
-# print(Pcan.ReadDID("8281"))
+Pcan.StartSession(3)
+print(Pcan.ReadDID("8281"))
 # print(Pcan.ReadDID("8282"))
 # print(Pcan.ReadDID("8283"))
 # print(Pcan.ReadDID("8284"))

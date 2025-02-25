@@ -32,8 +32,6 @@ class UDS_Frame():
     # Shows if DLL was found
     m_DLLFound = False
 
-    comOk = False
-
     timeout = 3
 
     #endregion
@@ -46,14 +44,17 @@ class UDS_Frame():
         
         ## set Configuration
         self.TxId = TxID
-        self.TxId = RxID
+        self.RxId = RxID
         if isExtended == True:
             self.typeExtended = PCAN_MESSAGE_EXTENDED
         else:
             self.typeExtended = PCAN_MESSAGE_STANDARD
+        self.isFiltered = isFiltered
         if isFiltered == True:
             self.fromID = min(TxID, RxID)
             self.toID = max(TxID, RxID)
+        
+        self.comOk = False
 
         ## Checks if PCANBasic.dll is available, if not, the program terminates
         try:
@@ -73,11 +74,11 @@ class UDS_Frame():
 
         if stsResult != PCAN_ERROR_OK:
             print("Can not initialize. Please check the defines in the code.")
-            self.ShowStatus(stsResult)
+            self.__ShowStatus(stsResult)
             print("")
             return
         
-        comOk = True
+        self.comOk = True
         
         ## filtering data
         if isFiltered == True:
@@ -85,7 +86,7 @@ class UDS_Frame():
 
         if stsResult != PCAN_ERROR_OK:
             print("Error setting filter.")
-            self.ShowStatus(stsResult)
+            self.__ShowStatus(stsResult)
             return
         
         # 5. Clear the receive queue
@@ -120,38 +121,38 @@ class UDS_Frame():
         ## find more. If the queue is empty or an error occurr, we get out from the dowhile statement.
         sizeData = 0
         if self.IsFD:
-            stsResult = self.ReadMessageFD()
+            stsResult = self.__ReadMessageFD()
             sizeData = stsResult[1].DLC
         else:
-            stsResult = self.ReadMessage()
+            stsResult = self.__ReadMessage()
             sizeData = stsResult[1].LEN
         if stsResult[0] == PCAN_ERROR_QRCVEMPTY:
             return None
         if stsResult[0] != PCAN_ERROR_OK:
-            self.ShowStatus(stsResult[0])
+            self.__ShowStatus(stsResult[0])
             return None
         return {"id" : stsResult[1].ID, "data" : stsResult[1].DATA,"len" : sizeData}
 
-    def ReadMessage(self):
+    def __ReadMessage(self):
         """
         Function for reading CAN messages on normal CAN devices
 
         Returns:
             A TPCANStatus error code
         """
-        ## We execute the "Read" function of the PCANBasic   
+        ## We execute the "Read" function of the PCANBasic
         stsResult = self.m_objPCANBasic.Read(self.PcanHandle)
             
         return stsResult
 
-    def ReadMessageFD(self):
+    def __ReadMessageFD(self):
         """
         Function for reading messages on FD devices
 
         Returns:
             A TPCANStatus error code
         """
-        ## We execute the "Read" function of the PCANBasic    
+        ## We execute the "Read" function of the PCANBasic
         stsResult = self.m_objPCANBasic.ReadFD(self.PcanHandle)
             
         return stsResult
@@ -161,15 +162,15 @@ class UDS_Frame():
         Function for writing PCAN-Basic messages
         '''
         if self.IsFD:
-            stsResult = self.WriteMessageFD(id, data)
+            stsResult = self.__WriteMessageFD(id, data)
         else:
-            stsResult = self.WriteMessage(id, data)
+            stsResult = self.__WriteMessage(id, data)
 
         ## Checks if the message was sent
         if (stsResult != PCAN_ERROR_OK):
-            self.ShowStatus(stsResult)
+            self.__ShowStatus(stsResult)
 
-    def WriteMessage(self, id, data):
+    def __WriteMessage(self, id, data):
         """
         Function for writing messages on CAN devices
 
@@ -185,7 +186,7 @@ class UDS_Frame():
             msgCanMessage.DATA[i] = data[i]
         return self.m_objPCANBasic.Write(self.PcanHandle, msgCanMessage)
 
-    def WriteMessageFD(self, id, data):
+    def __WriteMessageFD(self, id, data):
         """
         Function for writing messages on CAN-FD devices
 
@@ -213,6 +214,9 @@ class UDS_Frame():
             list: List of bytes if the read was successful.
             None: If an error occurs.
         """
+        if self.comOk == False:
+            print ("no Communication established")
+            exit(0)
         try:
             if len(DID) != 4 or not all(c in "0123456789ABCDEFabcdef" for c in DID):
                 raise ValueError(f"Invalid DID: {DID}. It must be a 4-character hex string.")
@@ -259,8 +263,8 @@ class UDS_Frame():
                     elif (msg['data'][1] == 0x7F):
                         error_code = msg['data'][3]
                         if error_code != 0x78:
-                            raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.get_uds_nrc_description(error_code))
-                else:
+                            raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
+                elif self.isFiltered == True:
                     time.sleep(0.1)
 
             raise TimeoutError(f"Time out No Response")
@@ -278,6 +282,9 @@ class UDS_Frame():
         Returns:
             bool: True if the write was successful, False otherwise.
         """
+        if self.comOk == False:
+            print ("no Communication established")
+            exit(0)
         try:
             if len(DID) != 4 or not all(c in "0123456789ABCDEFabcdef" for c in DID):
                 raise ValueError(f"Invalid DID: {DID}. It must be a 4-character hex string.")
@@ -335,13 +342,16 @@ class UDS_Frame():
                         return [f"Write {DID}", True]
                     elif response['data'][1] == 0x7F:
                         error_code = response['data'][3]
-                        raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.get_uds_nrc_description(error_code))
+                        raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
 
             raise TimeoutError(f"Time out No Response")
         except Exception as e:
             return [f"Write {DID}", False, e]
 
     def StartSession(self, number):
+        if self.comOk == False:
+            print ("no Communication established")
+            exit(0)
         data = []
         data.append(0x2)
         data.append(0x10)
@@ -363,13 +373,13 @@ class UDS_Frame():
         """
         print("Parameter values used")
         print("----------------------")
-        print("* PCANHandle: " + self.FormatChannelName(self.PcanHandle))
+        print("* PCANHandle: " + self.__FormatChannelName(self.PcanHandle))
         print("* IsFD: " + str(self.IsFD))
-        print("* Bitrate: " + self.ConvertBitrateToString(self.Bitrate))
-        print("* BitrateFD: " + self.ConvertBytesToString(self.BitrateFD))
+        print("* Bitrate: " + self.__ConvertBitrateToString(self.Bitrate))
+        print("* BitrateFD: " + self.__ConvertBytesToString(self.BitrateFD))
         print("")
 
-    def ShowStatus(self,status):
+    def __ShowStatus(self,status):
         """
         Shows formatted status
 
@@ -377,10 +387,10 @@ class UDS_Frame():
             status = Will be formatted
         """
         print("=========================================================================================")
-        print(self.GetFormattedError(status))
+        print(self.__GetFormattedError(status))
         print("=========================================================================================")
     
-    def FormatChannelName(self, handle, isFD=False):
+    def __FormatChannelName(self, handle, isFD=False):
         """
         Gets the formated text for a PCAN-Basic channel handle
 
@@ -400,11 +410,11 @@ class UDS_Frame():
             byChannel = handleValue & 0xFF
 
         if isFD:
-           return ('%s:FD %s (%.2Xh)' % (self.GetDeviceName(devDevice.value), byChannel, handleValue))
+           return ('%s:FD %s (%.2Xh)' % (self.__GetDeviceName(devDevice.value), byChannel, handleValue))
         else:
-           return ('%s %s (%.2Xh)' % (self.GetDeviceName(devDevice.value), byChannel, handleValue))
+           return ('%s %s (%.2Xh)' % (self.__GetDeviceName(devDevice.value), byChannel, handleValue))
 
-    def GetFormattedError(self, error):
+    def __GetFormattedError(self, error):
         """
         Help Function used to get an error as text
 
@@ -423,7 +433,7 @@ class UDS_Frame():
             message = str(stsReturn[1])
             return message.replace("'","",2).replace("b","",1)
 
-    def GetDeviceName(self, handle):
+    def __GetDeviceName(self, handle):
         """
         Gets the name of a PCAN device
 
@@ -445,7 +455,7 @@ class UDS_Frame():
 
         return switcher.get(handle,"UNKNOWN")   
 
-    def ConvertBitrateToString(self, bitrate):
+    def __ConvertBitrateToString(self, bitrate):
         """
         Convert bitrate c_short value to readable string
 
@@ -461,7 +471,7 @@ class UDS_Frame():
                        PCAN_BAUD_10K.value:'10 kBit/sec', PCAN_BAUD_5K.value:'5 kBit/sec'}
         return m_BAUDRATES[bitrate.value]
 
-    def ConvertBytesToString(self, bytes):
+    def __ConvertBytesToString(self, bytes):
         """
         Convert bytes value to string
 
@@ -473,7 +483,7 @@ class UDS_Frame():
         """
         return str(bytes).replace("'","",2).replace("b","",1)
     
-    def get_uds_nrc_description(self, nrc_byte):
+    def __get_uds_nrc_description(self, nrc_byte):
         """
         Returns the description of the given UDS NRC byte.
 
