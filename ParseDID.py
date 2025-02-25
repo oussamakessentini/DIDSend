@@ -123,18 +123,18 @@ def merge_did_and_assembly(DIDList, DID_Variable, DID_Connection):
             "Write": DIDList[did["DID_SHORT_NAME"]]["Write"]
         }
         for assembly in DID_Connection:
-            if did["DID_SHORT_NAME"] == assembly["DID_INDEX"] and did["DATA_ELEMENT_SHORT_NAME"] == assembly["DID_NAME"]:
+            if (did["DID_SHORT_NAME"] == assembly["DID_INDEX"]) and (did["DATA_ELEMENT_SHORT_NAME"] == assembly["DID_NAME"]):
                 if assembly["WRITE-CONNECTION"] == True:
                     if "TARGET-REF" not in item:
                         item["TARGET-REF"] = assembly["TARGET-P-PORT-REF"]
                     elif item["TARGET-REF"] != assembly["TARGET-P-PORT-REF"]:
-                        item["TARGET-REF"] = f"error {item["TARGET-REF"]} != {assembly["TARGET-P-PORT-REF"]}"
+                        item["TARGET-REF"] = f"error " + str(item["TARGET-REF"] != assembly["TARGET-P-PORT-REF"])
                     item["TARGET-R-PORT-REF"] = assembly["TARGET-R-PORT-REF"]
                 if assembly["READ-CONNECTION"] == True:
                     if "TARGET-REF" not in item:
                         item["TARGET-REF"] = assembly["TARGET-R-PORT-REF"]
                     elif item["TARGET-REF"] != assembly["TARGET-R-PORT-REF"]:
-                        item["TARGET-REF"] = f"error {item["TARGET-REF"]} != {assembly["TARGET-R-PORT-REF"]}"
+                        item["TARGET-REF"] = f"error " + str(item["TARGET-REF"] != assembly["TARGET-P-PORT-REF"])
                     item["TARGET-P-PORT-REF"] = assembly["TARGET-P-PORT-REF"]
         merged_data.append(item)
     return merged_data

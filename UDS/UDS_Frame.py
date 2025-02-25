@@ -8,9 +8,6 @@ import time
 
 class UDS_Frame():
 
-    # Defines
-    #region
-
     # Sets the PCANHandle (Hardware Channel)
     PcanHandle = PCAN_USBBUS1
 
@@ -24,17 +21,12 @@ class UDS_Frame():
     # Example - Bitrate Nom: 1Mbit/s Data: 2Mbit/s:
     #   "f_clock_mhz=20, nom_brp=5, nom_tseg1=2, nom_tseg2=1, nom_sjw=1, data_brp=2, data_tseg1=3, data_tseg2=1, data_sjw=1"
     BitrateFD = b'f_clock_mhz=20, nom_brp=5, nom_tseg1=2, nom_tseg2=1, nom_sjw=1, data_brp=2, data_tseg1=3, data_tseg2=1, data_sjw=1'    
-    #endregion
-
-    # Members
-    #region
 
     # Shows if DLL was found
     m_DLLFound = False
 
     timeout = 3
 
-    #endregion
 
     def __init__(self, TxID=0x18DADBF1, RxID=0x18DAF1DB, isExtended=True, isFiltered=True):
         """
@@ -68,8 +60,10 @@ class UDS_Frame():
 
         ## Initialization of the selected channel
         if self.IsFD:
+            print("CAN FD Initialized...")
             stsResult = self.m_objPCANBasic.InitializeFD(self.PcanHandle,self.BitrateFD)
         else:
+            print("CAN HS Initialized...")
             stsResult = self.m_objPCANBasic.Initialize(self.PcanHandle,self.Bitrate)
 
         if stsResult != PCAN_ERROR_OK:
@@ -239,6 +233,7 @@ class UDS_Frame():
                     if (msg['data'][1] == 0x62) and (msg['data'][2] == iDidHigh) and (msg['data'][3] == iDidLow):
                         result.extend(msg['data'][4:4+msg['data'][0]-3])
                         return [f"Read {DID}", result]
+                    
                     # test if the response is multi frame and extract the data
                     elif (msg['data'][0] == 0x10):
                         if (msg['data'][2] == 0x62) and (msg['data'][3] == iDidHigh) and (msg['data'][4] == iDidLow):
@@ -249,6 +244,7 @@ class UDS_Frame():
                             responseCmdWait = 1
                         sf_message = [0x30]
                         self.WriteMessages(self.TxId, sf_message)
+
                     elif msg['data'][0] == 0x20 | responseCmdWait:
                         if dataRemaining < 8:
                             result.extend(msg['data'][1:1+dataRemaining])
@@ -377,6 +373,10 @@ class UDS_Frame():
         print("* IsFD: " + str(self.IsFD))
         print("* Bitrate: " + self.__ConvertBitrateToString(self.Bitrate))
         print("* BitrateFD: " + self.__ConvertBytesToString(self.BitrateFD))
+        if self.IsFD:
+            print("* BitrateFD: " + self.ConvertBytesToString(self.BitrateFD))
+        else:
+            print("* Bitrate: " + self.ConvertBitrateToString(self.Bitrate))
         print("")
 
     def __ShowStatus(self,status):
