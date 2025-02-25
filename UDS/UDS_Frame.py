@@ -25,9 +25,6 @@ class UDS_Frame():
     # Shows if DLL was found
     m_DLLFound = False
 
-    timeout = 3
-
-
     def __init__(self, TxID=0x18DADBF1, RxID=0x18DAF1DB, isExtended=True, isFiltered=True):
         """
         Create an object starts the programm
@@ -47,6 +44,8 @@ class UDS_Frame():
             self.toID = max(TxID, RxID)
         
         self.comOk = False
+
+        self.timeout = 10
 
         ## Checks if PCANBasic.dll is available, if not, the program terminates
         try:
@@ -371,10 +370,9 @@ class UDS_Frame():
         print("----------------------")
         print("* PCANHandle: " + self.__FormatChannelName(self.PcanHandle))
         print("* IsFD: " + str(self.IsFD))
-        print("* Bitrate: " + self.__ConvertBitrateToString(self.Bitrate))
-        print("* BitrateFD: " + self.__ConvertBytesToString(self.BitrateFD))
+
         if self.IsFD:
-            print("* BitrateFD: " + self.ConvertBytesToString(self.BitrateFD))
+            print("* BitrateFD: " + self.__ConvertBytesToString(self.BitrateFD))
         else:
             print("* Bitrate: " + self.__ConvertBitrateToString(self.Bitrate))
         print("")
