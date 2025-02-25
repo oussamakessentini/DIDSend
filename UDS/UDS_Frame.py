@@ -225,16 +225,19 @@ class UDS_Frame():
             sizeData = 0
             dataRemaining = 0
             responseCmdWait = 0
+
             while ((time.time() - startTime) < self.timeout):
                 msg = self.ReadMessages()
-                if msg is not None and msg['id'] == self.RxId:
+                
+                if (msg is not None) and (msg['id'] == self.RxId):
+                    print(msg)
                     # test if the response is unique and return the response if so
                     if (msg['data'][1] == 0x62) and (msg['data'][2] == iDidHigh) and (msg['data'][3] == iDidLow):
                         result.extend(msg['data'][4:4+msg['data'][0]-3])
                         return [f"Read {DID}", result]
                     
                     # test if the response is multi frame and extract the data
-                    elif (msg['data'][0] == 0x10):
+                    elif (msg['data'][0] == 0x10) or (msg['data'][0] == 0x11):
                         if (msg['data'][2] == 0x62) and (msg['data'][3] == iDidHigh) and (msg['data'][4] == iDidLow):
                             sizeData = msg['data'][1] - 3
                             dataRemaining = sizeData
