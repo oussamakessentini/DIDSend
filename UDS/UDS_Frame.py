@@ -376,7 +376,7 @@ class UDS_Frame():
         if self.IsFD:
             print("* BitrateFD: " + self.ConvertBytesToString(self.BitrateFD))
         else:
-            print("* Bitrate: " + self.ConvertBitrateToString(self.Bitrate))
+            print("* Bitrate: " + self.__ConvertBitrateToString(self.Bitrate))
         print("")
 
     def __ShowStatus(self,status):
