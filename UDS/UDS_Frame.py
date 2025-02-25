@@ -32,20 +32,28 @@ class UDS_Frame():
     # Shows if DLL was found
     m_DLLFound = False
 
-    TxId = 0x18DADBF1
-    RxId = 0x18DAF1DB
-
     comOk = False
 
     timeout = 3
 
     #endregion
 
-    def __init__(self):
+    def __init__(self, TxID=0x18DADBF1, RxID=0x18DAF1DB, isExtended=True, isFiltered=True):
         """
         Create an object starts the programm
         """
         self.ShowCurrentConfiguration() ## Shows the current parameters configuration
+        
+        ## set Configuration
+        self.TxId = TxID
+        self.TxId = RxID
+        if isExtended == True:
+            self.typeExtended = PCAN_MESSAGE_EXTENDED
+        else:
+            self.typeExtended = PCAN_MESSAGE_STANDARD
+        if isFiltered == True:
+            self.fromID = min(TxID, RxID)
+            self.toID = max(TxID, RxID)
 
         ## Checks if PCANBasic.dll is available, if not, the program terminates
         try:
@@ -72,7 +80,8 @@ class UDS_Frame():
         comOk = True
         
         ## filtering data
-        stsResult = self.m_objPCANBasic.FilterMessages(self.PcanHandle, 0x18D00000, 0x18DFFFFF, PCAN_MESSAGE_EXTENDED)
+        if isFiltered == True:
+            stsResult = self.m_objPCANBasic.FilterMessages(self.PcanHandle, self.fromID, self.toID, self.typeExtended)
 
         if stsResult != PCAN_ERROR_OK:
             print("Error setting filter.")
@@ -171,7 +180,7 @@ class UDS_Frame():
         msgCanMessage = TPCANMsg()
         msgCanMessage.ID = id
         msgCanMessage.LEN = 8
-        msgCanMessage.MSGTYPE = PCAN_MESSAGE_EXTENDED.value
+        msgCanMessage.MSGTYPE = self.typeExtended.value
         for i in range(len(data)):
             msgCanMessage.DATA[i] = data[i]
         return self.m_objPCANBasic.Write(self.PcanHandle, msgCanMessage)
