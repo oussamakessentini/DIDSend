@@ -362,7 +362,7 @@ class UDS_Frame():
             msg = self.ReadMessages()
             if msg != None and (msg['data'][1] == 0x50) and (msg['data'][2] == number):
                 return True
-            else:
+            elif self.isFiltered == True:
                 time.sleep(0.1)
         return False
 
