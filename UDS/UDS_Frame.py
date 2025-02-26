@@ -104,8 +104,6 @@ class UDS_Frame():
         if self.m_DLLFound:
             self.m_objPCANBasic.Uninitialize(PCAN_NONEBUS)
 
-    # Main-Functions
-    #region
     def ReadMessages(self):
         """
         Function for reading PCAN-Basic messages
@@ -208,7 +206,7 @@ class UDS_Frame():
             None: If an error occurs.
         """
         if self.comOk == False:
-            print ("no Communication established")
+            print ("No Communication established")
             exit(0)
         try:
             if len(DID) != 4 or not all(c in "0123456789ABCDEFabcdef" for c in DID):
@@ -230,7 +228,7 @@ class UDS_Frame():
                 msg = self.ReadMessages()
                 
                 if (msg is not None) and (msg['id'] == self.RxId):
-                    print(msg)
+
                     # test if the response is unique and return the response if so
                     if (msg['data'][1] == 0x62) and (msg['data'][2] == iDidHigh) and (msg['data'][3] == iDidLow):
                         result.extend(msg['data'][4:4+msg['data'][0]-3])
@@ -255,7 +253,9 @@ class UDS_Frame():
                             result.extend(msg['data'][1:1+7])
                             dataRemaining -= 7
                         if dataRemaining == 0:
-                            return [f"Read {DID}", result]
+                            # Convert decimal list value to hex list
+                            lst_hexConv = [hex(int(x)) for x in result]
+                            return [f"Read {DID}", lst_hexConv]
                         responseCmdWait += 1
                         responseCmdWait %= 16
                     elif (msg['data'][1] == 0x7F):
