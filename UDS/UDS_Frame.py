@@ -8,40 +8,38 @@ import time
 
 class UDS_Frame():
 
-    # Sets the PCANHandle (Hardware Channel)
-    PcanHandle = PCAN_USBBUS1
-
-    # Sets the desired connection mode (CAN = False / CAN-FD = True)
-    IsFD = False
-
-    # Sets the bitrate for normal CAN devices
-    Bitrate = PCAN_BAUD_500K
-
-    # Sets the bitrate for CAN FD devices. 
-    # Example - Bitrate Nom: 1Mbit/s Data: 2Mbit/s:
-    #   "f_clock_mhz=20, nom_brp=5, nom_tseg1=2, nom_tseg2=1, nom_sjw=1, data_brp=2, data_tseg1=3, data_tseg2=1, data_sjw=1"
-    BitrateFD = b'f_clock_mhz=20, nom_brp=5, nom_tseg1=2, nom_tseg2=1, nom_sjw=1, data_brp=2, data_tseg1=3, data_tseg2=1, data_sjw=1'    
-
     # Shows if DLL was found
     m_DLLFound = False
 
-    def __init__(self, TxID=0x18DADBF1, RxID=0x18DAF1DB, isExtended=True, isFiltered=True):
+    def __init__(self, PcanHandle=PCAN_USBBUS1, IsCanFD=False, Bitrate=PCAN_BAUD_500K, \
+                 TxID=0x18DADBF1, RxID=0x18DAF1DB, isExtended=True, isFiltered=True):
         """
         Create an object starts the programm
         """
-        self.ShowCurrentConfiguration() ## Shows the current parameters configuration
-        
-        ## set Configuration
+
+        # Sets the PCANHandle (Hardware Channel)
+        self.PcanHandle = PcanHandle
+
+        # Sets the desired connection mode (CAN = False / CAN-FD = True)
+        self.IsCanFD = IsCanFD
+
+        # Sets the bitrate for normal CAN devices
+        self.Bitrate = Bitrate
+
+        # Sets the bitrate for CAN FD devices. 
+        # Example - Bitrate Nom: 1Mbit/s Data: 2Mbit/s:
+        #   "f_clock_mhz=20, nom_brp=5, nom_tseg1=2, nom_tseg2=1, nom_sjw=1, data_brp=2, data_tseg1=3, data_tseg2=1, data_sjw=1"
+        self.BitrateFD = b'f_clock_mhz=20, nom_brp=5, nom_tseg1=2, nom_tseg2=1, nom_sjw=1, data_brp=2, data_tseg1=3, data_tseg2=1, data_sjw=1'    
+
+        ## Set Configuration
         self.TxId = TxID
         self.RxId = RxID
+        
+        ## CAN Message Configuration
         if isExtended == True:
             self.typeExtended = PCAN_MESSAGE_EXTENDED
         else:
             self.typeExtended = PCAN_MESSAGE_STANDARD
-        self.isFiltered = isFiltered
-        if isFiltered == True:
-            self.fromID = min(TxID, RxID)
-            self.toID = max(TxID, RxID)
         
         self.comOk = False
 
@@ -58,7 +56,7 @@ class UDS_Frame():
             return
 
         ## Initialization of the selected channel
-        if self.IsFD:
+        if self.IsCanFD:
             print("CAN FD Initialized...")
             stsResult = self.m_objPCANBasic.InitializeFD(self.PcanHandle,self.BitrateFD)
         else:
@@ -74,18 +72,22 @@ class UDS_Frame():
         self.comOk = True
         
         ## filtering data
-        if isFiltered == True:
+        self.isFiltered = isFiltered
+        if self.isFiltered == True:
+            self.fromID = min(TxID, RxID)
+            self.toID = max(TxID, RxID)
+            
             stsResult = self.m_objPCANBasic.FilterMessages(self.PcanHandle, self.fromID, self.toID, self.typeExtended)
 
-        if stsResult != PCAN_ERROR_OK:
-            print("Error setting filter.")
-            self.__ShowStatus(stsResult)
-            return
-        
+            if stsResult != PCAN_ERROR_OK:
+                print("Error setting filter.")
+                self.__ShowStatus(stsResult)
+                return
+
         # 5. Clear the receive queue
         self.m_objPCANBasic.Reset(self.PcanHandle)
         # while True:
-        #     if self.IsFD:
+        #     if self.IsCanFD:
         #         stsResult = self.m_objPCANBasic.ReadFD(self.PcanHandle)
         #     else:
         #         stsResult = self.m_objPCANBasic.Read(self.PcanHandle)
@@ -97,12 +99,20 @@ class UDS_Frame():
         #         print(f"Error reading CAN message: {stsResult:X}")
         #         break
 
+        ## Shows the current parameters configuration
+        self.ShowCurrentConfiguration()
+
         ## Writing messages...
-        print("Successfully initialized.")
+        print("PCAN Successfully initialized.")
 
     def __del__(self):
         if self.m_DLLFound:
             self.m_objPCANBasic.Uninitialize(PCAN_NONEBUS)
+
+    def checkCanCom(self):
+        # stsResult = self.m_objPCANBasic.FilterMessages(self.PcanHandle, 0x0, 0xFFF, self.typeExtended)
+        msg = self.ReadMessages()
+        print(msg)
 
     def ReadMessages(self):
         """
@@ -111,7 +121,7 @@ class UDS_Frame():
         ## We read at least one time the queue looking for messages. If a message is found, we look again trying to 
         ## find more. If the queue is empty or an error occurr, we get out from the dowhile statement.
         sizeData = 0
-        if self.IsFD:
+        if self.IsCanFD:
             stsResult = self.__ReadMessageFD()
             sizeData = stsResult[1].DLC
         else:
@@ -152,7 +162,7 @@ class UDS_Frame():
         '''
         Function for writing PCAN-Basic messages
         '''
-        if self.IsFD:
+        if self.IsCanFD:
             stsResult = self.__WriteMessageFD(id, data)
         else:
             stsResult = self.__WriteMessage(id, data)
@@ -266,6 +276,7 @@ class UDS_Frame():
                     time.sleep(0.1)
 
             raise TimeoutError(f"Time out No Response")
+        
         except Exception as e:
             return [f"Read {DID}", e]
 
@@ -372,12 +383,19 @@ class UDS_Frame():
         print("Parameter values used")
         print("----------------------")
         print("* PCANHandle: " + self.__FormatChannelName(self.PcanHandle))
-        print("* IsFD: " + str(self.IsFD))
+        print("* CanFD: " + str(self.IsCanFD))
 
-        if self.IsFD:
+        if self.IsCanFD:
             print("* BitrateFD: " + self.__ConvertBytesToString(self.BitrateFD))
         else:
             print("* Bitrate: " + self.__ConvertBitrateToString(self.Bitrate))
+        
+        if(self.isFiltered == True):
+            print("* Filter: ON")
+            print("* CanTx: " + str(hex(self.TxId)))
+            print("* CanRx: " + str(hex(self.RxId)))
+        else:
+            print("* Filter: OFF")
         print("")
 
     def __ShowStatus(self,status):
@@ -391,13 +409,13 @@ class UDS_Frame():
         print(self.__GetFormattedError(status))
         print("=========================================================================================")
     
-    def __FormatChannelName(self, handle, isFD=False):
+    def __FormatChannelName(self, handle, IsCanFD=False):
         """
         Gets the formated text for a PCAN-Basic channel handle
 
         Parameters:
             handle = PCAN-Basic Handle to format
-            isFD = If the channel is FD capable
+            IsCanFD = If the channel is FD capable
 
         Returns:
             The formatted text for a channel
@@ -410,7 +428,7 @@ class UDS_Frame():
             devDevice = TPCANDevice(handleValue >> 8)
             byChannel = handleValue & 0xFF
 
-        if isFD:
+        if IsCanFD:
            return ('%s:FD %s (%.2Xh)' % (self.__GetDeviceName(devDevice.value), byChannel, handleValue))
         else:
            return ('%s %s (%.2Xh)' % (self.__GetDeviceName(devDevice.value), byChannel, handleValue))
@@ -555,4 +573,3 @@ class UDS_Frame():
 
         # Lookup the NRC byte
         return uds_nrc_codes.get(nrc_byte, "Unknown NRC code")
-    #endregion
