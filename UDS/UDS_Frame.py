@@ -229,53 +229,55 @@ class UDS_Frame():
             message = [len(message)] + message
             self.WriteMessages(self.TxId, message)
             startTime = time.time()
-            result = []
-            sizeData = 0
-            dataRemaining = 0
-            responseCmdWait = 0
+            DataSize = 0
+            response = []
+            resp_ok = False
 
             while ((time.time() - startTime) < self.timeout):
                 msg = self.ReadMessages()
                 
                 if (msg is not None) and (msg['id'] == self.RxId):
-
-                    # test if the response is unique and return the response if so
-                    if (msg['data'][1] == 0x62) and (msg['data'][2] == iDidHigh) and (msg['data'][3] == iDidLow):
-                        result.extend(msg['data'][4:4+msg['data'][0]-3])
-                        return [f"Read {DID}", result]
                     
-                    # test if the response is multi frame and extract the data
-                    elif (msg['data'][0] == 0x10) or (msg['data'][0] == 0x11):
-                        if (msg['data'][2] == 0x62) and (msg['data'][3] == iDidHigh) and (msg['data'][4] == iDidLow):
-                            sizeData = msg['data'][1] - 3
-                            dataRemaining = sizeData
-                            result = msg['data'][5:5+3]
-                            dataRemaining -= 3
-                            responseCmdWait = 1
-                        sf_message = [0x30]
-                        self.WriteMessages(self.TxId, sf_message)
-
-                    elif msg['data'][0] == 0x20 | responseCmdWait:
-                        if dataRemaining < 8:
-                            result.extend(msg['data'][1:1+dataRemaining])
-                            dataRemaining = 0
+                    # Check if the response is multi frame and extract the data
+                    if (msg['data'][2] == 0x62) and (msg['data'][3] == iDidHigh) and (msg['data'][4] == iDidLow):
+                        resp_ok = True
+                        if ((msg['data'][0] >> 4) == 0x1):
+                            print("Consecutive frame => parsing...")
+                            DataSize = ((msg['data'][0] & 0x0F) << 8) | msg['data'][1]
+                            # print(DataSize)
+                            for i in range(5, 8):
+                                response.append(hex(msg['data'][i]))
+                            # print(response)
+                            DataSize -= 3 # remove the first frame data (3 bytes)
+                            sf_message = [0x30] # Request the next data
+                            self.WriteMessages(self.TxId, sf_message)
+                    
+                    # Retrive the next consecutive data
+                    elif (msg['data'][0] >= 0x20) and (msg['data'][0] <= 0x2F):
+                        range_temp = 0
+                        if(DataSize > 8) :
+                            range_temp = 8
+                            DataSize -= 8
                         else:
-                            result.extend(msg['data'][1:1+7])
-                            dataRemaining -= 7
-                        if dataRemaining == 0:
-                            # Convert decimal list value to hex list
-                            lst_hexConv = [hex(int(x)) for x in result]
-                            return [f"Read {DID}", lst_hexConv]
-                        responseCmdWait += 1
-                        responseCmdWait %= 16
+                            range_temp = DataSize
+                        for i in range(1, range_temp):
+                            response.append(hex(msg['data'][i]))
+                        # Check end of data to end the loop
+                        if(range_temp == DataSize):
+                            break
+
                     elif (msg['data'][1] == 0x7F):
                         error_code = msg['data'][3]
                         if error_code != 0x78:
                             raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
-                elif self.isFiltered == True:
-                    time.sleep(0.1)
 
-            raise TimeoutError(f"Time out No Response")
+                elif self.isFiltered == True:
+                    time.sleep(0.01)
+            
+            if(resp_ok == True):
+                return response
+            else:
+                raise TimeoutError(f"Time out No Response")
         
         except Exception as e:
             return [f"Read {DID}", e]
