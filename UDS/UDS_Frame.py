@@ -238,30 +238,41 @@ class UDS_Frame():
                 
                 if (msg is not None) and (msg['id'] == self.RxId):
                     
+                    if(msg['data'][1] == 0x62) and (msg['data'][2] == iDidHigh) and (msg['data'][3] == iDidLow):
+                        resp_ok = True
+                        DataSize = msg['data'][0]
+                        for i in range(4, DataSize + 1):
+                            response.append(hex(msg['data'][i]))
+                        break
+
                     # Check if the response is multi frame and extract the data
-                    if (msg['data'][2] == 0x62) and (msg['data'][3] == iDidHigh) and (msg['data'][4] == iDidLow):
+                    elif (msg['data'][2] == 0x62) and (msg['data'][3] == iDidHigh) and (msg['data'][4] == iDidLow):
                         resp_ok = True
                         if ((msg['data'][0] >> 4) == 0x1):
                             print("Consecutive frame => parsing...")
                             DataSize = ((msg['data'][0] & 0x0F) << 8) | msg['data'][1]
-                            # print(DataSize)
+                            
                             for i in range(5, 8):
                                 response.append(hex(msg['data'][i]))
                             # print(response)
-                            DataSize -= 3 # remove the first frame data (3 bytes)
+                            DataSize -= 5 # remove the first frame data (5 bytes)
+                            # print(DataSize)
                             sf_message = [0x30] # Request the next data
                             self.WriteMessages(self.TxId, sf_message)
-                    
+
                     # Retrive the next consecutive data
                     elif (msg['data'][0] >= 0x20) and (msg['data'][0] <= 0x2F):
                         range_temp = 0
-                        if(DataSize > 8) :
+                        if(DataSize > 7) :
                             range_temp = 8
-                            DataSize -= 8
+                            DataSize -= 7
                         else:
                             range_temp = DataSize
+                        
                         for i in range(1, range_temp):
                             response.append(hex(msg['data'][i]))
+                        # print(range_temp, DataSize)
+
                         # Check end of data to end the loop
                         if(range_temp == DataSize):
                             break
