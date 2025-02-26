@@ -12,9 +12,9 @@ if __name__ == "__main__":
         RxId = 0x694
         Pcan = UDS_Frame(PCAN_USBBUS1, False, PCAN_BAUD_500K, TxId, RxId, False, True)
 
-        # print(Pcan.ReadDID("F41C"))
-        # print(Pcan.ReadDID("D863"))
-        # Pcan.checkCanCom()
+        # print(Pcan.getFrameFromId(596))
+        print(Pcan.ReadDID("F41C"))
+        print(Pcan.ReadDID("D863"))
         print(Pcan.ReadDID("0101"))
     else:
         TxId = 0x18DADBF1

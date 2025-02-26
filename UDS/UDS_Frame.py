@@ -73,46 +73,82 @@ class UDS_Frame():
         
         ## filtering data
         self.isFiltered = isFiltered
-        if self.isFiltered == True:
-            self.fromID = min(TxID, RxID)
-            self.toID = max(TxID, RxID)
+
+        self.fromID = 0
+        self.toID = 0
+        
+        if(self.__checkCanCom() == True):
+            if self.isFiltered == True:
+                self.fromID = min(TxID, RxID)
+                self.toID = max(TxID, RxID)
+                
+                stsResult = self.m_objPCANBasic.FilterMessages(self.PcanHandle, self.fromID, self.toID, self.typeExtended)
+
+                if stsResult != PCAN_ERROR_OK:
+                    print("Error setting filter.")
+                    self.__ShowStatus(stsResult)
+                    return None
             
-            stsResult = self.m_objPCANBasic.FilterMessages(self.PcanHandle, self.fromID, self.toID, self.typeExtended)
+            # Clear the receive queue
+            self.m_objPCANBasic.Reset(self.PcanHandle)
+            # while True:
+            #     if self.IsCanFD:
+            #         stsResult = self.m_objPCANBasic.ReadFD(self.PcanHandle)
+            #     else:
+            #         stsResult = self.m_objPCANBasic.Read(self.PcanHandle)
+            #     if (stsResult[0] & PCAN_ERROR_QRCVEMPTY):
+            #         # Queue is now empty
+            #         print("Receive queue cleared.")
+            #         break
+            #     elif stsResult[0] != PCAN_ERROR_OK:
+            #         print(f"Error reading CAN message: {stsResult:X}")
+            #         break
 
-            if stsResult != PCAN_ERROR_OK:
-                print("Error setting filter.")
-                self.__ShowStatus(stsResult)
-                return
+            ## Shows the current parameters configuration
+            self.ShowCurrentConfiguration()
 
-        # 5. Clear the receive queue
-        self.m_objPCANBasic.Reset(self.PcanHandle)
-        # while True:
-        #     if self.IsCanFD:
-        #         stsResult = self.m_objPCANBasic.ReadFD(self.PcanHandle)
-        #     else:
-        #         stsResult = self.m_objPCANBasic.Read(self.PcanHandle)
-        #     if (stsResult[0] & PCAN_ERROR_QRCVEMPTY):
-        #         # Queue is now empty
-        #         print("Receive queue cleared.")
-        #         break
-        #     elif stsResult[0] != PCAN_ERROR_OK:
-        #         print(f"Error reading CAN message: {stsResult:X}")
-        #         break
-
-        ## Shows the current parameters configuration
-        self.ShowCurrentConfiguration()
-
-        ## Writing messages...
-        print("PCAN Successfully initialized.")
+            print("PCAN Successfully initialized.")
+        else:
+            print("Error : PCAN initialization failed => No Communication")
 
     def __del__(self):
         if self.m_DLLFound:
             self.m_objPCANBasic.Uninitialize(PCAN_NONEBUS)
 
-    def checkCanCom(self):
-        # stsResult = self.m_objPCANBasic.FilterMessages(self.PcanHandle, 0x0, 0xFFF, self.typeExtended)
-        msg = self.ReadMessages()
-        print(msg)
+    def __checkCanCom(self):
+        msg = 0
+        startTime = time.time()
+        while ((time.time() - startTime) < self.timeout):
+            msg = self.ReadMessages()
+            if (msg is not None):
+                break
+
+        if (msg is not None):
+            return True
+        else:
+            return False
+        
+    def getFrameFromId(self, canId):
+        """
+        Retrieve CAN message from CAN ID
+
+        Parameters:
+            canId (int): hex value without "0x" (e.g., "596").
+
+        Returns:
+            Can Message data object.
+        """
+        msg = 0
+        if ((canId < self.fromID) or (canId > self.toID)) and (self.isFiltered == True):
+            print("Warning : this Can ID is filtered.")
+            return None
+        else:
+            startTime = time.time()
+            while ((time.time() - startTime) < self.timeout):
+                msg = self.ReadMessages()
+                if (msg is not None) and (msg['id'] == canId):
+                    break
+        return msg
 
     def ReadMessages(self):
         """
@@ -225,9 +261,9 @@ class UDS_Frame():
             iDid = int(DID,16)
             iDidHigh = (iDid & 0xFF00) >> 8
             iDidLow = iDid & 0xFF
-            message = [0x22, iDidHigh, iDidLow]
-            message = [len(message)] + message
+            message = [3] + [0x22, iDidHigh, iDidLow]
             self.WriteMessages(self.TxId, message)
+            
             startTime = time.time()
             DataSize = 0
             response = []
@@ -235,7 +271,7 @@ class UDS_Frame():
 
             while ((time.time() - startTime) < self.timeout):
                 msg = self.ReadMessages()
-                
+                # print(msg)
                 if (msg is not None) and (msg['id'] == self.RxId):
                     
                     if(msg['data'][1] == 0x62) and (msg['data'][2] == iDidHigh) and (msg['data'][3] == iDidLow):
@@ -249,7 +285,7 @@ class UDS_Frame():
                     elif (msg['data'][2] == 0x62) and (msg['data'][3] == iDidHigh) and (msg['data'][4] == iDidLow):
                         resp_ok = True
                         if ((msg['data'][0] >> 4) == 0x1):
-                            print("Consecutive frame => parsing...")
+                            # Consecutive frame => parsing...
                             DataSize = ((msg['data'][0] & 0x0F) << 8) | msg['data'][1]
                             
                             for i in range(5, 8):
@@ -291,7 +327,7 @@ class UDS_Frame():
                 raise TimeoutError(f"Time out No Response")
         
         except Exception as e:
-            return [f"Read {DID}", e]
+            return ["Read {DID}", e]
 
     def WriteDID(self, DID, data):
         """
@@ -385,7 +421,7 @@ class UDS_Frame():
             if msg != None and (msg['data'][1] == 0x50) and (msg['data'][2] == number):
                 return True
             elif self.isFiltered == True:
-                time.sleep(0.1)
+                time.sleep(0.01)
         return False
 
 
