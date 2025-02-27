@@ -13,7 +13,7 @@ def Pcan_ReadDID(Pcan, did):
         data = ";".join(format_hex(int(x, 16)) for x in retVal)
         Error = ""
     else:
-        result = "KO"
+        result = "NOK"
         data = ""
         Error = str(retVal[1])
     return result, data, Error
@@ -22,10 +22,10 @@ def Pcan_WriteDID(Pcan, did, dataraw):
     data = [int(x, 16) for x in dataraw.split(";")]
     retVal = Pcan.WriteDID(did, data)
     if retVal[1] == True:
-        status = "Success"
+        status = "OK"
         Error = ""
     else:
-        status = "Failed"
+        status = "NOK"
         Error = str(retVal[2])
     # Retourne un tuple (status, error)
     return status, Error
