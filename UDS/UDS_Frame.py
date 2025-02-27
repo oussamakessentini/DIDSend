@@ -5,6 +5,7 @@ script_dir = os.path.dirname( __file__ )
 sys.path.append( script_dir )
 from PCANBasic import *
 import time
+from Utils import *
 
 class UDS_Frame():
 
@@ -527,7 +528,7 @@ class UDS_Frame():
                         resp_ok = True
                         DataSize = msg['data'][0]
                         for i in range(4, DataSize + 1):
-                            response.append(hex(msg['data'][i]))
+                            response.append(format_hex(msg['data'][i]))
                         break
 
                     # Check if the response is multi frame and extract the data
@@ -538,9 +539,9 @@ class UDS_Frame():
                             DataSize = ((msg['data'][0] & 0x0F) << 8) | msg['data'][1]
                             
                             for i in range(5, 8):
-                                response.append(hex(msg['data'][i]))
+                                response.append(format_hex(msg['data'][i]))
                             # print(response)
-                            DataSize -= 5 # remove the first frame data (5 bytes)
+                            DataSize -= 6 # remove the first frame data (6 bytes)
                             # print(DataSize)
                             sf_message = [0x30] # Request the next data
                             self.WriteMessages(self.TxId, sf_message)
@@ -548,18 +549,18 @@ class UDS_Frame():
                     # Retrive the next consecutive data
                     elif (msg['data'][0] >= 0x20) and (msg['data'][0] <= 0x2F):
                         range_temp = 0
-                        if(DataSize > 7) :
-                            range_temp = 8
+                        if(DataSize >= 7) :
+                            range_temp = 7
                             DataSize -= 7
                         else:
                             range_temp = DataSize
                         
-                        for i in range(1, range_temp):
-                            response.append(hex(msg['data'][i]))
+                        for i in range(0, range_temp):
+                            response.append(format_hex(msg['data'][i+1]))
                         # print(range_temp, DataSize)
 
                         # Check end of data to end the loop
-                        if(range_temp == DataSize):
+                        if(range_temp == DataSize) or (DataSize == 0):
                             break
 
                     elif (msg['data'][1] == 0x7F):
@@ -576,7 +577,7 @@ class UDS_Frame():
                 raise TimeoutError(f"Time out No Response")
         
         except Exception as e:
-            return ["Read {DID}", e]
+            return [f"Read {DID}", e]
 
     def WriteDID(self, DID, data):
         """
