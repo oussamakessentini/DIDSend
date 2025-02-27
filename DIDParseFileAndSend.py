@@ -2,8 +2,24 @@ from UDS.PCANBasic import *
 from UDS.UDS_Frame import UDS_Frame
 import pandas as pd
 from Utils import *
+from openpyxl import load_workbook
+from openpyxl.styles import PatternFill
+from openpyxl.formatting.rule import CellIsRule
 
 PROJECT = 'PR128'
+
+def adjustWidth(ws):
+    for col in ws.columns:
+        max_length = 0
+        column = col[0].column_letter  # Récupérer la lettre de la colonne (A, B, C, ...)
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(cell.value)
+            except:
+                pass
+        adjusted_width = (max_length + 2)  # Ajouter un peu d'espace
+        ws.column_dimensions[column].width = adjusted_width
 
 def Pcan_ReadDID(Pcan, did):
     retVal = Pcan.ReadDID(did)
@@ -61,6 +77,43 @@ def parseAndSend(Pcan):
     with pd.ExcelWriter(fichier_excel, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
         df_read.to_excel(writer, sheet_name='DID Read', index=False)
         df_write.to_excel(writer, sheet_name='DID Write', index=False)
+
+    # Charger le fichier Excel avec openpyxl pour ajouter des règles de mise en forme
+    wb = load_workbook(fichier_excel)
+    ws_read = wb['DID Read']
+    ws_write = wb['DID Write']
+
+    # Ajuster la largeur des colonnes pour s'adapter au contenu
+    adjustWidth(ws_read)
+    adjustWidth(ws_write)
+
+    # Définir les couleurs pour la mise en forme conditionnelle
+    fill_green = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")  # Vert
+    fill_red = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")    # Rouge
+
+    # Ajouter une règle de mise en forme conditionnelle pour la colonne "Resultat"
+    # Règle 1 : Si la valeur est "OK", appliquer le vert
+    ws_read.conditional_formatting.add(
+        f"B2:B{ws_read.max_row}",  # Appliquer à la colonne B (Resultat) à partir de la ligne 2
+        CellIsRule(operator='equal', formula=['"OK"'], fill=fill_green)
+    )
+    ws_write.conditional_formatting.add(
+        f"B2:B{ws_write.max_row}",  # Appliquer à la colonne B (Resultat) à partir de la ligne 2
+        CellIsRule(operator='equal', formula=['"OK"'], fill=fill_green)
+    )
+
+    # Règle 2 : Si la valeur est "NOK", appliquer le rouge
+    ws_read.conditional_formatting.add(
+        f"B2:B{ws_read.max_row}",  # Appliquer à la colonne B (Resultat) à partir de la ligne 2
+        CellIsRule(operator='equal', formula=['"NOK"'], fill=fill_red)
+    )
+    ws_write.conditional_formatting.add(
+        f"B2:B{ws_write.max_row}",  # Appliquer à la colonne B (Resultat) à partir de la ligne 2
+        CellIsRule(operator='equal', formula=['"NOK"'], fill=fill_red)
+    )
+
+    # Sauvegarder le fichier Excel avec les règles de mise en forme
+    wb.save(fichier_excel)
 
     print(f"Le fichier {fichier_excel} a été mis à jour avec succès.")
 

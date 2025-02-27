@@ -611,7 +611,7 @@ class UDS_Frame():
             # Construct the first message payload
             message = [0x2E, did_high, did_low] + data
 
-            if len(message) <= 8:  # Single Frame
+            if len(message) < 8:  # Single Frame
                 sf_message = [len(message)] + message
                 self.WriteMessages(self.TxId, sf_message)
             else:  # Multi-Frame Communication
