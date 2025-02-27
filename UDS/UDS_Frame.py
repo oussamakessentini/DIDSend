@@ -196,11 +196,13 @@ class UDS_Frame():
             print("* BitrateFD: " + self.__ConvertBytesToString(self.BitrateFD))
         else:
             print("* Bitrate: " + self.__ConvertBitrateToString(self.Bitrate))
-        
+
+        print("* CanTx: " + str(hex(self.TxId)))
+        print("* CanRx: " + str(hex(self.RxId)))
         if(self.isFiltered == True):
             print("* Filter: ON")
-            print("* CanTx: " + str(hex(self.TxId)))
-            print("* CanRx: " + str(hex(self.RxId)))
+            print("  - From: " + str(hex(self.fromID)))
+            print("  - To  : " + str(hex(self.toID)))
         else:
             print("* Filter: OFF")
         print("")
@@ -453,6 +455,7 @@ class UDS_Frame():
         while ((time.time() - startTime) < self.timeout):
             msg = self.ReadMessages()
             if (msg != None) and (msg['data'][1] == 0x50) and (msg['data'][2] == number):
+                print ("Session activated...")
                 return True
             elif self.isFiltered == True:
                 time.sleep(0.1)
