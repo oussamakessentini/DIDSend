@@ -48,11 +48,11 @@ def Pcan_WriteDID(Pcan, did, dataraw):
 
 def parseAndSend(Pcan):
     # Chemin vers le fichier Excel
-    fichier_excel = 'DID_Status.xlsx'
+    excel_file = 'DID_Status.xlsx'
 
     # Charger les feuilles "DID Read" et "DID Write" dans des DataFrames
-    df_read = pd.read_excel(fichier_excel, sheet_name='DID Read', dtype=str)
-    df_write = pd.read_excel(fichier_excel, sheet_name='DID Write', dtype=str)
+    df_read = pd.read_excel(excel_file, sheet_name='DID Read', dtype=str)
+    df_write = pd.read_excel(excel_file, sheet_name='DID Write', dtype=str)
 
     # Parcourir la feuille "DID Read" ligne par ligne
     for index, ligne in df_read.iterrows():
@@ -74,12 +74,12 @@ def parseAndSend(Pcan):
         df_write.at[index, 'Error'] = error
 
     # Sauvegarder les modifications dans le même fichier Excel
-    with pd.ExcelWriter(fichier_excel, engine='openpyxl', mode='a', if_sheet_exists='replace') as writer:
+    with pd.ExcelWriter(excel_file, engine='openpyxl', mode='w', if_sheet_exists='replace') as writer:
         df_read.to_excel(writer, sheet_name='DID Read', index=False)
         df_write.to_excel(writer, sheet_name='DID Write', index=False)
 
     # Charger le fichier Excel avec openpyxl pour ajouter des règles de mise en forme
-    wb = load_workbook(fichier_excel)
+    wb = load_workbook(excel_file)
     ws_read = wb['DID Read']
     ws_write = wb['DID Write']
 
@@ -113,9 +113,9 @@ def parseAndSend(Pcan):
     )
 
     # Sauvegarder le fichier Excel avec les règles de mise en forme
-    wb.save(fichier_excel)
+    wb.save(excel_file)
 
-    print(f"Le fichier {fichier_excel} a été mis à jour avec succès.")
+    print(f"{excel_file} updated successfully")
 
 if __name__ == "__main__":
 
