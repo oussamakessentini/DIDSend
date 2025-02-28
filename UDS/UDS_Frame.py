@@ -383,6 +383,26 @@ class UDS_Frame():
         # Lookup the NRC byte
         return uds_nrc_codes.get(nrc_byte, "Unknown NRC code")
 
+    def __get_uds_rc_status_desc(self, rc_st_byte):
+        """
+        Returns the description of the given UDS RC byte.
+
+        :param rc_st_byte: The RC status byte (integer or hex) to check.
+        :return: Description of the RC status byte.
+        """
+        uds_rc_st_codes = {
+            0x1: "ROUTINE_IN_PROCESS",
+            0x2: "ROUTINE_FINISHED_OK",
+            0x3: "ROUTINE_FINISHED_NOT_OK",
+        }
+
+        # Convert to integer if input is a string with "0x"
+        if isinstance(rc_st_byte, str) and rc_st_byte.startswith("0x"):
+            rc_st_byte = int(rc_st_byte, 16)
+
+        # Lookup the NRC byte
+        return uds_rc_st_codes.get(rc_st_byte, "Unknown RC status code")
+
     def ReadMessages(self):
         """
         Function for reading PCAN-Basic messages
@@ -659,7 +679,7 @@ class UDS_Frame():
         except Exception as e:
             return [f"Write {DID}", False, e]
 
-    def StartRC(self, DID, data):
+    def StartRC(self, DID, data=None):
         """
         Start routine controle using UDS (0x31).
 
@@ -677,9 +697,6 @@ class UDS_Frame():
             if len(DID) != 4 or not all(c in "0123456789ABCDEFabcdef" for c in DID):
                 raise ValueError(f"Invalid DID: {DID}. It must be a 4-character hex string.")
 
-            if len(data) == 0 or len(data) > 4095:
-                raise ValueError(f"Invalid data length: {len(data)}. Must be between 1 and 4095 bytes.")
-
             # Convert DID to bytes
             iDid = int(DID, 16)
             did_high = (iDid & 0xFF00) >> 8
@@ -694,6 +711,8 @@ class UDS_Frame():
             if(data is None):
                 message = [len(startRcMsgPL)] + startRcMsgPL
             else:
+                if len(data) == 0 or len(data) > 4095:
+                    raise ValueError(f"Invalid data length: {len(data)}. Must be between 1 and 4095 bytes.")
                 message = [len(startRcMsgPL + data)] + startRcMsgPL + data
 
             self.WriteMessages(self.TxId, message)
@@ -701,17 +720,17 @@ class UDS_Frame():
             
             start_time = time.time()
             while time.time() - start_time < self.timeout:
-                rc_message = self.ReadMessages()
-                if (rc_message is not None):
-                    # print(rc_message)
-                    if((rc_message['id'] == self.RxId) and\
-                       (rc_message['data'][1] == 0x71) and\
-                       (rc_message['data'][3] == did_high) and\
-                       (rc_message['data'][4] == did_low)):
+                rc_msg = self.ReadMessages()
+                if (rc_msg is not None):
+                    # print(rc_msg)
+                    if((rc_msg['id'] == self.RxId) and\
+                       (rc_msg['data'][1] == 0x71) and\
+                       (rc_msg['data'][3] == did_high) and\
+                       (rc_msg['data'][4] == did_low)):
 
                         if(rc_start == True):
                             if(data is not None):
-                                if(rc_message['data'][5] != data[0]):
+                                if(rc_msg['data'][5] != data[0]):
                                     print('Error StartRC : wrong received data')
                                     break
                             # Request routine control result
@@ -720,13 +739,14 @@ class UDS_Frame():
                             self.WriteMessages(self.TxId, message)
                             rc_start = False
                         else:
-                            return rc_message['data'][5]
+                            return self.__get_uds_rc_status_desc(rc_msg['data'][5])
 
-                    elif((rc_message['id'] == self.RxId) and\
-                         (rc_message['data'][1] == 0x71) and\
-                         (rc_message['data'][3] == did_high) and\
-                         (rc_message['data'][4] == did_low)):
-                        print('TODO 7F')
+                    elif((rc_msg['id'] == self.RxId) and\
+                         (rc_msg['data'][1] == 0x7F) and\
+                         (rc_msg['data'][2] == 0x31)):
+                        return ('StartRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
+                    else:
+                        return ('StartRc Error : ', format_hex(rc_msg['data'][1]), format_hex(rc_msg['data'][2]), self.__get_uds_nrc_description(rc_msg['data'][3]))
                 else:
                     time.sleep(0.1)
             raise TimeoutError(f"Time out No Response")

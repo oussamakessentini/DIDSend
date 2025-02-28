@@ -47,6 +47,7 @@ if __name__ == "__main__":
         # time.sleep(7)
         # print(Pcan.ReadDID("E323"))
         print(Pcan.StartRC('DDE1', [0x01]))
+        print(Pcan.StartRC('DD3A'))
         
     else:
         TxId = 0x18DADBF1
