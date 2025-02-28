@@ -704,10 +704,9 @@ class UDS_Frame():
 
             # Message payload
             startRcMsgPL  = [0x31, 0x01, did_high, did_low]
-            stopRcMsgPL   = [0x31, 0x02, did_high, did_low]
             resultRcMsgPL = [0x31, 0x03, did_high, did_low]
 
-            # Construct the first message payload
+            # Construct the message payload
             if(data is None):
                 message = [len(startRcMsgPL)] + startRcMsgPL
             else:
@@ -747,6 +746,114 @@ class UDS_Frame():
                         return ('StartRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
                     else:
                         return ('StartRc Error : ', format_hex(rc_msg['data'][1]), format_hex(rc_msg['data'][2]), self.__get_uds_nrc_description(rc_msg['data'][3]))
+                else:
+                    time.sleep(0.1)
+            raise TimeoutError(f"Time out No Response")
+        except Exception as e:
+            return [f"Write {DID}", False, e]
+
+    def StopRC(self, DID):
+        """
+        Stop routine controle using UDS (0x31).
+
+        Parameters:
+            DID (str): The 2-byte Data Identifier (e.g., "3481").
+
+        Returns:
+            bool: True if the write was successful, False otherwise.
+        """
+        if self.comOk == False:
+            print ("No Communication established")
+            exit(0)
+        try:
+            if len(DID) != 4 or not all(c in "0123456789ABCDEFabcdef" for c in DID):
+                raise ValueError(f"Invalid DID: {DID}. It must be a 4-character hex string.")
+
+            # Convert DID to bytes
+            iDid = int(DID, 16)
+            did_high = (iDid & 0xFF00) >> 8
+            did_low = iDid & 0x00FF
+
+            # Message payload
+            stopRcMsgPL   = [0x31, 0x02, did_high, did_low]
+
+            # Construct the message payload
+            message = [len(stopRcMsgPL)] + stopRcMsgPL
+
+            self.WriteMessages(self.TxId, message)
+            
+            start_time = time.time()
+            while time.time() - start_time < self.timeout:
+                rc_msg = self.ReadMessages()
+                if (rc_msg is not None):
+                    # print(rc_msg)
+                    if((rc_msg['id'] == self.RxId) and\
+                       (rc_msg['data'][1] == 0x71) and\
+                       (rc_msg['data'][3] == did_high) and\
+                       (rc_msg['data'][4] == did_low)):
+
+                        return 'ROUTINE_STOPPED_OK'
+
+                    elif((rc_msg['id'] == self.RxId) and\
+                         (rc_msg['data'][1] == 0x7F) and\
+                         (rc_msg['data'][2] == 0x31)):
+                        return ('StopRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
+                    else:
+                        return ('StopRc Error : ', format_hex(rc_msg['data'][1]), format_hex(rc_msg['data'][2]), self.__get_uds_nrc_description(rc_msg['data'][3]))
+                else:
+                    time.sleep(0.1)
+            raise TimeoutError(f"Time out No Response")
+        except Exception as e:
+            return [f"Write {DID}", False, e]
+
+    def ResultRC(self, DID):
+        """
+        Result routine controle using UDS (0x31).
+
+        Parameters:
+            DID (str): The 2-byte Data Identifier (e.g., "3481").
+
+        Returns:
+            bool: True if the write was successful, False otherwise.
+        """
+        if self.comOk == False:
+            print ("No Communication established")
+            exit(0)
+        try:
+            if len(DID) != 4 or not all(c in "0123456789ABCDEFabcdef" for c in DID):
+                raise ValueError(f"Invalid DID: {DID}. It must be a 4-character hex string.")
+
+            # Convert DID to bytes
+            iDid = int(DID, 16)
+            did_high = (iDid & 0xFF00) >> 8
+            did_low = iDid & 0x00FF
+
+            # Message payload
+            resultRcMsgPL = [0x31, 0x03, did_high, did_low]
+
+            # Construct the message payload
+            message = [len(resultRcMsgPL)] + resultRcMsgPL
+
+            self.WriteMessages(self.TxId, message)
+            rc_start = True
+            
+            start_time = time.time()
+            while time.time() - start_time < self.timeout:
+                rc_msg = self.ReadMessages()
+                if (rc_msg is not None):
+                    # print(rc_msg)
+                    if((rc_msg['id'] == self.RxId) and\
+                       (rc_msg['data'][1] == 0x71) and\
+                       (rc_msg['data'][3] == did_high) and\
+                       (rc_msg['data'][4] == did_low)):
+                        return self.__get_uds_rc_status_desc(rc_msg['data'][5])
+
+                    elif((rc_msg['id'] == self.RxId) and\
+                         (rc_msg['data'][1] == 0x7F) and\
+                         (rc_msg['data'][2] == 0x31)):
+                        return ('ResultRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
+                    else:
+                        return ('ResultRc Error : ', format_hex(rc_msg['data'][1]), format_hex(rc_msg['data'][2]), self.__get_uds_nrc_description(rc_msg['data'][3]))
                 else:
                     time.sleep(0.1)
             raise TimeoutError(f"Time out No Response")
