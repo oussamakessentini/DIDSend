@@ -161,7 +161,7 @@ class UDS_Frame():
         ## Sends a CAN message with extended ID, and 8 data bytes
         msgCanMessage = TPCANMsg()
         msgCanMessage.ID = id
-        msgCanMessage.LEN = 8
+        msgCanMessage.LEN = len(data)
         msgCanMessage.MSGTYPE = self.typeExtended.value
         for i in range(len(data)):
             msgCanMessage.DATA[i] = data[i]
@@ -594,7 +594,7 @@ class UDS_Frame():
             bool: True if the write was successful, False otherwise.
         """
         if self.comOk == False:
-            print ("no Communication established")
+            print ("No Communication established")
             exit(0)
         try:
             if len(DID) != 4 or not all(c in "0123456789ABCDEFabcdef" for c in DID):
@@ -655,6 +655,80 @@ class UDS_Frame():
                         error_code = response['data'][3]
                         raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
 
+            raise TimeoutError(f"Time out No Response")
+        except Exception as e:
+            return [f"Write {DID}", False, e]
+
+    def StartRC(self, DID, data):
+        """
+        Start routine controle using UDS (0x31).
+
+        Parameters:
+            DID (str): The 2-byte Data Identifier (e.g., "3481").
+            data (list): A list of bytes as argument for the routine control.
+
+        Returns:
+            bool: True if the write was successful, False otherwise.
+        """
+        if self.comOk == False:
+            print ("No Communication established")
+            exit(0)
+        try:
+            if len(DID) != 4 or not all(c in "0123456789ABCDEFabcdef" for c in DID):
+                raise ValueError(f"Invalid DID: {DID}. It must be a 4-character hex string.")
+
+            if len(data) == 0 or len(data) > 4095:
+                raise ValueError(f"Invalid data length: {len(data)}. Must be between 1 and 4095 bytes.")
+
+            # Convert DID to bytes
+            iDid = int(DID, 16)
+            did_high = (iDid & 0xFF00) >> 8
+            did_low = iDid & 0x00FF
+
+            # Message payload
+            startRcMsgPL  = [0x31, 0x01, did_high, did_low]
+            stopRcMsgPL   = [0x31, 0x02, did_high, did_low]
+            resultRcMsgPL = [0x31, 0x03, did_high, did_low]
+
+            # Construct the first message payload
+            if(data is None):
+                message = [len(startRcMsgPL)] + startRcMsgPL
+            else:
+                message = [len(startRcMsgPL + data)] + startRcMsgPL + data
+
+            self.WriteMessages(self.TxId, message)
+            rc_start = True
+            
+            start_time = time.time()
+            while time.time() - start_time < self.timeout:
+                rc_message = self.ReadMessages()
+                if (rc_message is not None):
+                    # print(rc_message)
+                    if((rc_message['id'] == self.RxId) and\
+                       (rc_message['data'][1] == 0x71) and\
+                       (rc_message['data'][3] == did_high) and\
+                       (rc_message['data'][4] == did_low)):
+
+                        if(rc_start == True):
+                            if(data is not None):
+                                if(rc_message['data'][5] != data[0]):
+                                    print('Error StartRC : wrong received data')
+                                    break
+                            # Request routine control result
+                            message = [len(resultRcMsgPL)] + resultRcMsgPL
+
+                            self.WriteMessages(self.TxId, message)
+                            rc_start = False
+                        else:
+                            return rc_message['data'][5]
+
+                    elif((rc_message['id'] == self.RxId) and\
+                         (rc_message['data'][1] == 0x71) and\
+                         (rc_message['data'][3] == did_high) and\
+                         (rc_message['data'][4] == did_low)):
+                        print('TODO 7F')
+                else:
+                    time.sleep(0.1)
             raise TimeoutError(f"Time out No Response")
         except Exception as e:
             return [f"Write {DID}", False, e]
