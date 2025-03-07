@@ -74,7 +74,7 @@ def parseAndSend(Pcan):
         df_write.at[index, 'Error'] = error
 
     # Sauvegarder les modifications dans le même fichier Excel
-    with pd.ExcelWriter(excel_file, engine='openpyxl', mode='w', if_sheet_exists='replace') as writer:
+    with pd.ExcelWriter(excel_file, engine='openpyxl', mode='w') as writer:
         df_read.to_excel(writer, sheet_name='DID Read', index=False)
         df_write.to_excel(writer, sheet_name='DID Write', index=False)
 

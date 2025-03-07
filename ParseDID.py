@@ -3,17 +3,18 @@ import re
 import os
 
 dir_name = os.path.dirname(os.path.abspath(__file__))
-path_DIDList = os.path.join(dir_name, "../../../Outputs/Log/DIDStatus.csv")
-path_Rte = os.path.join(dir_name, "../../../Inputs/DEXT/BMS_AW010700.arxml")
-path_Connection = os.path.join(dir_name, "../../../Inputs/DEXT/Dext_Connections.arxml")
-# path_ConnectionAdded = os.path.join(dir_name, "../../../Inputs/Arxml/BSW/DcmDID_Connectivity.arxml")
+path_DIDList = os.path.join(dir_name, "./DIDStatus.csv")
+path_Rte = os.path.join(dir_name, "../BmsGen2_Copy/Inputs/DEXT/BMS_AW010700.arxml")
+path_Connection = os.path.join(dir_name, "../BmsGen2_Copy/Inputs/DEXT/Dext_Connections.arxml")
+# path_ConnectionAdded = os.path.join(dir_name, "../BmsGen2_Copy/Inputs/Arxml/BSW/DcmDID_Connectivity.arxml")
 
-enum_pattern_ReadWriteDID = re.compile(
-    r'<SHORT-NAME>DCM_DID_(\w{4})_([R|W]\w*)<\/SHORT-NAME>',
-    re.MULTILINE
-)
 
 def extractOsTaskWithIndex(file_path):
+    # use regex Read and Write function extract
+    enum_pattern_ReadWriteDID = re.compile(
+        r'<SHORT-NAME>DCM_DID_(\w{4})_([R|W]\w*)<\/SHORT-NAME>',
+        re.MULTILINE
+    )
     with open(file_path, 'r') as file:
         content = file.read()
     
@@ -23,7 +24,7 @@ def extractOsTaskWithIndex(file_path):
         FunctionName = match.group(2)
 
         enums.setdefault(did_name, {'Read': False, 'Write': False})
-        
+        # fill data with read and write access
         if FunctionName == "Read":
             enums[did_name]["Read"] = True
         elif FunctionName == "Write":
@@ -51,6 +52,7 @@ def find_recursive(element, tag):
     return None
 
 def extract_did_data(file_path):
+    # parse ARXML File and extract data
     tree = ET.parse(file_path)
     tree = remove_namespace(tree)
     root = tree.getroot()
@@ -61,21 +63,28 @@ def extract_did_data(file_path):
         did_short_name = did.find("SHORT-NAME")
         if did_short_name is not None:
             did_name = did_short_name.text[-4:]
-            
+            did_Size = did.find("DID-SIZE")
+
+            elements = []
             for diag_param in did.iter("DIAGNOSTIC-PARAMETER"):  
                 element_short_name = find_recursive(diag_param, "SHORT-NAME")
                 bit_offset = find_recursive(diag_param, "BIT-OFFSET")
                 
                 if element_short_name is not None and bit_offset is not None:
-                    did_data.append({
-                        "DID_SHORT_NAME": did_name,
-                        "DATA_ELEMENT_SHORT_NAME": element_short_name.text,
+                    elements.append({
+                        "DID_VAR_NAME": element_short_name.text,
                         "BIT_OFFSET": bit_offset.text
                     })
+            did_data.append({
+                "DID_SHORT_NAME": did_name,
+                "DID_SIZE": did_Size.text,
+                "VARIABLES": elements
+            })
     
     return did_data
 
 def extract_did_connection(file_path):
+    # parse ARXML File and extract data
     tree = ET.parse(file_path)
     tree = remove_namespace(tree)
     root = tree.getroot()
@@ -112,46 +121,51 @@ def extract_did_connection(file_path):
             
     return connection_data
 
-def merge_did_and_assembly(DIDList, DID_Variable, DID_Connection):
+def merge_did_and_assembly(DIDList, DID_data, DID_Connection):
     merged_data = []
-    for did in DID_Variable:
+    for did in DID_data:
         item = {
             "DID_INDEX": did["DID_SHORT_NAME"],
-            "DID_VAR_NAME": did["DATA_ELEMENT_SHORT_NAME"],
-            "BIT_OFFSET": did["BIT_OFFSET"],
+            "DID_SIZE": did["DID_SIZE"],
+            "DID_VARS": did["VARIABLES"],
             "Read": DIDList[did["DID_SHORT_NAME"]]["Read"],
             "Write": DIDList[did["DID_SHORT_NAME"]]["Write"]
         }
-        for assembly in DID_Connection:
-            if (did["DID_SHORT_NAME"] == assembly["DID_INDEX"]) and (did["DATA_ELEMENT_SHORT_NAME"] == assembly["DID_NAME"]):
-                if assembly["WRITE-CONNECTION"] == True:
-                    if "TARGET-REF" not in item:
-                        item["TARGET-REF"] = assembly["TARGET-P-PORT-REF"]
-                    elif item["TARGET-REF"] != assembly["TARGET-P-PORT-REF"]:
-                        item["TARGET-REF"] = f"error " + str(item["TARGET-REF"] != assembly["TARGET-P-PORT-REF"])
-                    item["TARGET-R-PORT-REF"] = assembly["TARGET-R-PORT-REF"]
-                if assembly["READ-CONNECTION"] == True:
-                    if "TARGET-REF" not in item:
-                        item["TARGET-REF"] = assembly["TARGET-R-PORT-REF"]
-                    elif item["TARGET-REF"] != assembly["TARGET-R-PORT-REF"]:
-                        item["TARGET-REF"] = f"error " + str(item["TARGET-REF"] != assembly["TARGET-P-PORT-REF"])
-                    item["TARGET-P-PORT-REF"] = assembly["TARGET-P-PORT-REF"]
+        for variable in item["DID_VARS"]:
+            for assembly in DID_Connection:
+                if (item["DID_INDEX"] == assembly["DID_INDEX"]) and (variable["DID_VAR_NAME"] == assembly["DID_NAME"]):
+                    if assembly["WRITE-CONNECTION"] == True:
+                        if "TARGET-REF" not in variable:
+                            variable["TARGET-REF"] = assembly["TARGET-P-PORT-REF"]
+                        elif variable["TARGET-REF"] != assembly["TARGET-P-PORT-REF"]:
+                            variable["TARGET-REF"] = f"error " + str(variable["TARGET-REF"] != assembly["TARGET-P-PORT-REF"])
+                        variable["TARGET-R-PORT-REF"] = assembly["TARGET-R-PORT-REF"]
+                    if assembly["READ-CONNECTION"] == True:
+                        if "TARGET-REF" not in variable:
+                            variable["TARGET-REF"] = assembly["TARGET-R-PORT-REF"]
+                        elif variable["TARGET-REF"] != assembly["TARGET-R-PORT-REF"]:
+                            variable["TARGET-REF"] = f"error " + str(variable["TARGET-REF"] != assembly["TARGET-P-PORT-REF"])
+                        variable["TARGET-P-PORT-REF"] = assembly["TARGET-P-PORT-REF"]
         merged_data.append(item)
     return merged_data
 
 def writeIntoCSV(data):
     try:
         with open(path_DIDList, "w") as f:
-            f.write("DID;Variable_Name;Bit_Offset;Target_Ref;Port_Provider;Port_Request;Read;Write\n")
+            f.write("DID;DID_SIZE;Read;Write;Variable\n")
             for item in data:
-                f.write(f"{item.get('DID_INDEX', '')};{item.get('DID_VAR_NAME', '')};{item.get('BIT_OFFSET', '')};{item.get('TARGET-REF', '')};{item.get('TARGET-P-PORT-REF', '')};{item.get('TARGET-R-PORT-REF', '')};{item.get('Read', '')};{item.get('Write', '')}\n")
+                f.write(f"{item.get('DID_INDEX', '')};{item.get('DID_SIZE', '')};{item.get('Read', '')};{item.get('Write', '')};{item["DID_VARS"]}\n")
     except Exception as e:
         print(str(e))
 
 if __name__ == "__main__":
+    # extract DID data Write and Read Access
     DIDList = extractOsTaskWithIndex(path_Rte)
-    DID_Variable = extract_did_data(path_Rte)
+    # extract DID size and variable name
+    DID_data = extract_did_data(path_Rte)
+    # extract connection established for Dcm
     DID_Connection = extract_did_connection(path_Connection)
     # DID_Connection.extend(extract_did_connection(path_ConnectionAdded))
-    merged_info = merge_did_and_assembly(DIDList, DID_Variable, DID_Connection)
+    # merge all Dictionnary into a csv file
+    merged_info = merge_did_and_assembly(DIDList, DID_data, DID_Connection)
     writeIntoCSV(merged_info)
