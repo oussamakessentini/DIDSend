@@ -18,7 +18,7 @@ def adjustWidth(ws):
                     max_length = len(cell.value)
             except:
                 pass
-        adjusted_width = (max_length + 2)  # Ajouter un peu d'espace
+        adjusted_width = (max_length + 2) if max_length < 100 else 100  # Ajouter un peu d'espace
         ws.column_dimensions[column].width = adjusted_width
 
 def Pcan_ReadDID(Pcan, did):
@@ -48,7 +48,7 @@ def Pcan_WriteDID(Pcan, did, dataraw):
 
 def parseAndSend(Pcan):
     # Chemin vers le fichier Excel
-    excel_file = 'DID_Status.xlsx'
+    excel_file = 'DID_Status_PR128.xlsx'
 
     # Charger les feuilles "DID Read" et "DID Write" dans des DataFrames
     df_read = pd.read_excel(excel_file, sheet_name='DID Read', dtype=str)
@@ -136,7 +136,7 @@ if __name__ == "__main__":
     else:
         TxId = 0x18DADBF1
         RxId = 0x18DAF1DB
-        Pcan = UDS_Frame(PCAN_USBBUS1, False, PCAN_BAUD_500K, TxId, RxId, True, True)
+        Pcan = UDS_Frame(PCAN_USBBUS1, False, PCAN_BAUD_500K, TxId, RxId, True, True, True)
 
         Pcan.StartSession(3)
         # print(Pcan.ReadDID("8281"))

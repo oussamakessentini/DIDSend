@@ -13,7 +13,7 @@ class UDS_Frame():
     m_DLLFound = False
 
     def __init__(self, PcanHandle=PCAN_USBBUS1, IsCanFD=False, Bitrate=PCAN_BAUD_500K, \
-                 TxID=0x18DADBF1, RxID=0x18DAF1DB, isExtended=True, isFiltered=True):
+                 TxID=0x18DADBF1, RxID=0x18DAF1DB, isExtended=True, isFiltered=True, isZeroPadded=False):
         """
         Create an object starts the programm
         """
@@ -26,6 +26,9 @@ class UDS_Frame():
 
         # Sets the bitrate for normal CAN devices
         self.Bitrate = Bitrate
+
+        # Padded to zero to have 8 bytes frame
+        self.isZeroPadded = isZeroPadded
 
         # Sets the bitrate for CAN FD devices. 
         # Example - Bitrate Nom: 1Mbit/s Data: 2Mbit/s:
@@ -44,7 +47,7 @@ class UDS_Frame():
         
         self.comOk = False
 
-        self.timeout = 10
+        self.timeout = 2
 
         # Checks if PCANBasic.dll is available, if not, the program terminates
         try:
@@ -161,7 +164,7 @@ class UDS_Frame():
         ## Sends a CAN message with extended ID, and 8 data bytes
         msgCanMessage = TPCANMsg()
         msgCanMessage.ID = id
-        msgCanMessage.LEN = len(data)
+        msgCanMessage.LEN = 8 if self.isZeroPadded else len(data)
         msgCanMessage.MSGTYPE = self.typeExtended.value
         for i in range(len(data)):
             msgCanMessage.DATA[i] = data[i]
