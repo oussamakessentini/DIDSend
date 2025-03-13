@@ -60,5 +60,4 @@ def loadConfigFilePath():
         config = yaml.safe_load(file)
         dir_name = os.path.dirname(os.path.abspath(__file__))
         path_fileConfig = os.path.join(dir_name, config["configFile"])
-        print (path_fileConfig)
         return path_fileConfig
