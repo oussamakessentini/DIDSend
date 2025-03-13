@@ -1,0 +1,20 @@
+project: "PR128"
+DIDStatusCsv: "DIDStatus.csv"
+DIDStatusExcel: "DIDStatus_PR1281.xlsx"
+CanConfig:
+  TxId: 0x18DADBF1
+  RxId: 0x18DAF1DB
+  IsCanFD: False
+  IsExtended: True
+  IsFiltered: True
+  IsPadded: True
+  timeout: 2
+  # PcanLib: "CanApi4Lib"
+  PcanLib: "PCANBasicLib"
+  PCANBasicConfig:
+    PcanHandle: "PCAN_USBBUS1"
+    Bitrate: "PCAN_BAUD_500K"
+  CanApi4Config:
+    device: "pcan_usb"
+    client_name: "PythonClient"
+    net_name: "ch1_500kb"

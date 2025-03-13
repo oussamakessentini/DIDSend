@@ -1,13 +1,18 @@
 import pandas as pd
 import csv
 import ast  # To safely convert string representation of list/dict
+from Utils import *
 
-sourceCSVPath = "DIDStatus.csv"
-excel_file = 'DID_Status_PR128.xlsx'
+DIDStatusCsv = "DIDStatus.csv"
+DIDStatusExcel = 'DID_Status_PR128.xlsx'
 
 if __name__ == "__main__":
+    # replace local variable with the config 
+    FileConfig = loadConfigFilePath()
+    load_config(globals(), globals(), FileConfig)
+    
     # Open and read the CSV file
-    with open(sourceCSVPath, mode='r', encoding='utf-8') as file:
+    with open(DIDStatusCsv, mode='r', encoding='utf-8') as file:
         reader = csv.DictReader(file, delimiter=';')  # Use semicolon as delimiter
 
         data_read = []
@@ -23,7 +28,7 @@ if __name__ == "__main__":
         df_read = pd.DataFrame(data_read)
         df_write = pd.DataFrame(data_write)
 
-        with pd.ExcelWriter(excel_file, engine='openpyxl', mode='w') as writer:
+        with pd.ExcelWriter(DIDStatusExcel, engine='openpyxl', mode='w') as writer:
                 df_read.to_excel(writer, sheet_name='DID Read', index=False)
                 df_write.to_excel(writer, sheet_name='DID Write', index=False)
 

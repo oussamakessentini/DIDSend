@@ -1,4 +1,3 @@
-from UDS.PCANBasic import *
 from UDS.UDS_Frame import UDS_Frame
 import pandas as pd
 from Utils import *
@@ -118,11 +117,12 @@ def parseAndSend(Pcan):
     print(f"{excel_file} updated successfully")
 
 if __name__ == "__main__":
+    project='PR105'
+    FileConfig=loadConfigFilePath()
+    load_config(globals(), globals(), FileConfig)
 
     if(PROJECT == 'PR105'):
-        TxId = 0x6B4
-        RxId = 0x694
-        Pcan = UDS_Frame(PCAN_USBBUS1, False, PCAN_BAUD_500K, TxId, RxId, False, True)
+        Pcan = UDS_Frame(FileConfig=FileConfig)
 
         # print(Pcan.getFrameFromId(596))
         Pcan.StartSession(3)
@@ -134,9 +134,7 @@ if __name__ == "__main__":
         parseAndSend(Pcan)
         
     else:
-        TxId = 0x18DADBF1
-        RxId = 0x18DAF1DB
-        Pcan = UDS_Frame(PCAN_USBBUS1, False, PCAN_BAUD_500K, TxId, RxId, True, True, True)
+        Pcan = UDS_Frame(FileConfig=FileConfig)
 
         Pcan.StartSession(3)
         # print(Pcan.ReadDID("8281"))
