@@ -1,6 +1,8 @@
 project: PR128
-DIDStatusCsv: DIDStatus.csv
-DIDStatusExcel: DIDStatus_PR1281.xlsx
+DIDStatusCsv: DIDStatus_PR128.csv
+DIDStatusExcel: DIDStatus_PR128.xlsx
+PathToDextArxml: ../BmsGen2/Inputs/DEXT/BMS_AW010700.arxml
+pathToAssemblyConnectionDID: ../BmsGen2/Inputs/DEXT/Dext_Connections.arxml
 CanConfig:
   TxId: 0x18DADBF1
   RxId: 0x18DAF1DB

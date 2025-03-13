@@ -1,13 +1,11 @@
 import xml.etree.ElementTree as ET
 import re
 import os
+from UDS.Utils import *
 
-dir_name = os.path.dirname(os.path.abspath(__file__))
-path_DIDList = os.path.join(dir_name, "./DIDStatus.csv")
-path_Rte = os.path.join(dir_name, "../BmsGen2_Copy/Inputs/DEXT/BMS_AW010700.arxml")
-path_Connection = os.path.join(dir_name, "../BmsGen2_Copy/Inputs/DEXT/Dext_Connections.arxml")
-# path_ConnectionAdded = os.path.join(dir_name, "../BmsGen2_Copy/Inputs/Arxml/BSW/DcmDID_Connectivity.arxml")
-
+DIDStatusCsv = "./DIDStatus.csv"
+PathToDextArxml = "../BmsGen2_Copy/Inputs/DEXT/BMS_AW010700.arxml"
+pathToAssemblyConnectionDID = "../BmsGen2_Copy/Inputs/DEXT/Dext_Connections.arxml"
 
 def extractOsTaskWithIndex(file_path):
     # use regex Read and Write function extract
@@ -159,10 +157,20 @@ def writeIntoCSV(data):
         print(str(e))
 
 if __name__ == "__main__":
+    # replace local variable with the config 
+    FileConfig = loadConfigFilePath()
+    load_config(globals(), globals(), FileConfig)
+
+    dir_name = os.path.dirname(os.path.abspath(__file__))
+    path_DIDList = os.path.join(dir_name, DIDStatusCsv)
+    path_DEXT = os.path.join(dir_name, PathToDextArxml)
+    path_Connection = os.path.join(dir_name, pathToAssemblyConnectionDID)
+    # path_ConnectionAdded = os.path.join(dir_name, "../BmsGen2_Copy/Inputs/Arxml/BSW/DcmDID_Connectivity.arxml")
+
     # extract DID data Write and Read Access
-    DIDList = extractOsTaskWithIndex(path_Rte)
+    DIDList = extractOsTaskWithIndex(path_DEXT)
     # extract DID size and variable name
-    DID_data = extract_did_data(path_Rte)
+    DID_data = extract_did_data(path_DEXT)
     # extract connection established for Dcm
     DID_Connection = extract_did_connection(path_Connection)
     # DID_Connection.extend(extract_did_connection(path_ConnectionAdded))

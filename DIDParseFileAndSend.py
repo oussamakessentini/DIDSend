@@ -1,6 +1,6 @@
 from UDS.UDS_Frame import UDS_Frame
 import pandas as pd
-from Utils import *
+from UDS.Utils import *
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 from openpyxl.formatting.rule import CellIsRule
