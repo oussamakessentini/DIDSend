@@ -9,8 +9,8 @@ CanConfig:
   IsFiltered: True
   IsPadded: True
   timeout: 2
-  # PcanLib: CanApi4Lib
-  PcanLib: PCANBasicLib
+  PcanLib: CanApi4Lib
+  # PcanLib: PCANBasicLib
   PCANBasicConfig:
     PcanHandle: PCAN_USBBUS1
     Bitrate: PCAN_BAUD_500K

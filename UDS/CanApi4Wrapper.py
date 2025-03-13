@@ -1,3 +1,6 @@
+# import sys
+# import os
+# sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from CanApi4 import *
 import time
 from Utils import *
@@ -24,11 +27,14 @@ class CanApi4Wrapper:
         if FileConfig != None:
             load_config(self, globals(), FileConfig, Encode=True)
 
+        self.minRange = 0
         # CAN Message Configuration
         if self.IsExtended == True:
             self.typeExtended = CAN_MSGTYPE_EXTENDED
+            self.maxRange = 0x1FFFFFFF
         else:
             self.typeExtended = CAN_MSGTYPE_STANDARD
+            self.maxRange = 0x7FF
         
         try:
             self.can_api = CanApi4()
@@ -55,19 +61,13 @@ class CanApi4Wrapper:
             return False
         
         # set read function to read only one frame at a time
-        param = can_param_uint32_t()
-        param.size = sizeof(param)
-        param.type = CAN_PARAM_READ_MAX_RECORDCOUNT
-        param.objclass = CAN_PARAM_OBJCLASS_CLIENT
-        param.objhandle = self.net_handle
-        param.value = 1
-        result = self.can_api.SetParam(self.device, param)
-        if (result != CAN_ERR_OK):
-            self.get_error_text("SetParam", result)
+        if self.setParam(CAN_PARAM_READ_MAX_RECORDCOUNT, CAN_PARAM_OBJCLASS_CLIENT, 1) == False:
             return False
-        
+
         if self.IsFiltered == True:
             self.set_filter(self.TxId, self.RxId)
+        else:
+            self.set_filter(self.minRange, self.maxRange)
 
         self.comOk = True
 
@@ -76,6 +76,10 @@ class CanApi4Wrapper:
     
     def set_filter(self, start_id=0x100, end_id=0x200):
         """Set a filter to only receive messages within the specified ID range."""
+        result = self.can_api.ResetClientFilter(self.device, self.client_handle)
+        if result != CAN_ERR_OK:
+            self.get_error_text("ResetClientFilter", result)
+
         result = self.can_api.RegisterMessages(self.device, self.client_handle, self.net_handle, start_id, end_id, self.IsExtended)
         if result != CAN_ERR_OK:
             self.get_error_text("RegisterMessages", result)
@@ -84,6 +88,19 @@ class CanApi4Wrapper:
 
         # Clear the receive queue
         self.can_api.ResetClient(self.device, self.client_handle)
+
+    def setParam(self, type, objclass, value):
+        param = can_param_uint32_t()
+        param.size = sizeof(param)
+        param.type = type
+        param.objclass = objclass
+        param.objhandle = self.client_handle
+        param.value = value
+        result = self.can_api.SetParam(self.device, param)
+        if (result != CAN_ERR_OK):
+            self.get_error_text("SetParam", result)
+            return False
+        return True
 
     def set_msg_dlc(self, msg_type, size):
         max_dlc = 15 if msg_type == CAN_RECORDTYPE_msg_fd.value else 8
@@ -142,7 +159,7 @@ class CanApi4Wrapper:
                 return_value["id"] = msg.id
                 return_value["len"] = msg.dlc
                 return_value["data"] = msg.data.data[:msg.dlc]
-
+ 
         if result[0] == CAN_ERR_QRCVEMPTY:
             return None
         if result[0] != CAN_ERR_OK:
@@ -191,11 +208,11 @@ class CanApi4Wrapper:
 
 # Example Usage
 if __name__ == "__main__":
-    can_wrapper = CanApi4Wrapper(net_name=b"ch1_500kb")
+    can_wrapper = CanApi4Wrapper(net_name=b"ch1_500kb", IsFiltered=False)
     if can_wrapper.initialize():
         print("CAN Initialized Successfully")
         while True:
             message = can_wrapper.read()
-            print("Received Message:", message)
-            time.sleep(2)
+            if message != None:
+                print("Received Message:", message)
         can_wrapper.uninitialize()
