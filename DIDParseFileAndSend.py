@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from UDS.UDS_Frame import UDS_Frame
 import pandas as pd
 from UDS.Utils import *
@@ -5,7 +8,8 @@ from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 from openpyxl.formatting.rule import CellIsRule
 
-PROJECT = 'PR128'
+project='PR105'
+DIDStatusExcel = "DIDStatus_PR105.xlsx"
 
 def adjustWidth(ws):
     for col in ws.columns:
@@ -46,12 +50,9 @@ def Pcan_WriteDID(Pcan, did, dataraw):
     return status, Error
 
 def parseAndSend(Pcan):
-    # Chemin vers le fichier Excel
-    excel_file = 'DID_Status_PR128.xlsx'
-
     # Charger les feuilles "DID Read" et "DID Write" dans des DataFrames
-    df_read = pd.read_excel(excel_file, sheet_name='DID Read', dtype=str)
-    df_write = pd.read_excel(excel_file, sheet_name='DID Write', dtype=str)
+    df_read = pd.read_excel(DIDStatusExcel, sheet_name='DID Read', dtype=str)
+    df_write = pd.read_excel(DIDStatusExcel, sheet_name='DID Write', dtype=str)
 
     # Parcourir la feuille "DID Read" ligne par ligne
     for index, ligne in df_read.iterrows():
@@ -73,12 +74,12 @@ def parseAndSend(Pcan):
         df_write.at[index, 'Error'] = error
 
     # Sauvegarder les modifications dans le même fichier Excel
-    with pd.ExcelWriter(excel_file, engine='openpyxl', mode='w') as writer:
+    with pd.ExcelWriter(DIDStatusExcel, engine='openpyxl', mode='w') as writer:
         df_read.to_excel(writer, sheet_name='DID Read', index=False)
         df_write.to_excel(writer, sheet_name='DID Write', index=False)
 
     # Charger le fichier Excel avec openpyxl pour ajouter des règles de mise en forme
-    wb = load_workbook(excel_file)
+    wb = load_workbook(DIDStatusExcel)
     ws_read = wb['DID Read']
     ws_write = wb['DID Write']
 
@@ -112,16 +113,15 @@ def parseAndSend(Pcan):
     )
 
     # Sauvegarder le fichier Excel avec les règles de mise en forme
-    wb.save(excel_file)
+    wb.save(DIDStatusExcel)
 
-    print(f"{excel_file} updated successfully")
+    print(f"{DIDStatusExcel} updated successfully")
 
 if __name__ == "__main__":
-    project='PR105'
     FileConfig=loadConfigFilePath()
     load_config(globals(), globals(), FileConfig)
 
-    if(PROJECT == 'PR105'):
+    if(project == 'PR105'):
         Pcan = UDS_Frame(FileConfig=FileConfig)
 
         # print(Pcan.getFrameFromId(596))
