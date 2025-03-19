@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
 import re
 import os
-from UDS.Utils import *
+from UDS.utils import *
 
 DIDStatusCsv = "./DIDStatus.csv"
 PathToDextArxml = "../BmsGen2_Copy/Inputs/DEXT/BMS_AW010700.arxml"

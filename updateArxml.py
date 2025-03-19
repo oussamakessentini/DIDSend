@@ -41,10 +41,10 @@ def modify_arxml(file_path):
     
     # Save modified file
     modified_file = file_path.replace(".arxml", "_modified.arxml")
-    tree.write(modified_file, encoding="utf-8", xml_declaration=True)
-    print(f"Modified file saved as {modified_file}")
+    tree.write(file_path, encoding="utf-8", xml_declaration=True)
+    print(f"Modified file saved as {file_path}")
 
 # Example usage
 dir_name = os.path.dirname(os.path.abspath(__file__))
-path_file = os.path.join(dir_name, "../../../Software/Config/RtaCar/ecu_config/bsw/HV_BMS_Project_Dcm_EcucValues.arxml")
+path_file = os.path.join(dir_name, "../BmsGen2_Copy/Software/Config/RtaCar/ecu_config/bsw/HV_BMS_Project_Dcm_EcucValues.arxml")
 modify_arxml(path_file)

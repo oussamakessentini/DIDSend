@@ -1,6 +1,6 @@
-from PCANBasic import *
+from .PCANBasic import *
+from .utils import *
 import time
-from UDS.Utils import *
 
 class PCANBasicWrapper:
     def __init__(self, FileConfig=None, PcanHandle="PCAN_USBBUS1", IsCanFD=False, Bitrate="PCAN_BAUD_500K", \

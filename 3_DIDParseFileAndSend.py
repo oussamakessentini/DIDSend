@@ -1,9 +1,6 @@
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from UDS.UDS_Frame import UDS_Frame
 import pandas as pd
-from UDS.Utils import *
+from UDS.utils import *
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 from openpyxl.formatting.rule import CellIsRule
@@ -24,13 +21,21 @@ def adjustWidth(ws):
         adjusted_width = (max_length + 2) if max_length < 100 else 100  # Ajouter un peu d'espace
         ws.column_dimensions[column].width = adjusted_width
 
-def Pcan_ReadDID(Pcan, did):
+def Pcan_ReadDID(Pcan, did, size):
     retVal = Pcan.ReadDID(did)
 
     if is_hex(retVal[0]) == True:
-        result = "OK"
         data = ";".join(format_hex(int(x, 16)) for x in retVal)
-        Error = ""
+        if is_int(size):
+            if (len(retVal) == int(size)):
+                result = "OK"
+                Error = ""
+            else:
+                result = "NOK"
+                Error = f"Data received with incorrect size, data size received {len(retVal)}, data size expected {size}"
+        else:
+            result = "NOK"
+            Error = f"size is not an integer {size}"
     else:
         result = "NOK"
         data = ""
@@ -57,7 +62,7 @@ def parseAndSend(Pcan):
     # Parcourir la feuille "DID Read" ligne par ligne
     for index, ligne in df_read.iterrows():
         # Appeler la fonction Pcan.ReadDID avec le DID de la ligne
-        resultat, data, error = Pcan_ReadDID(Pcan, ligne['DID'])
+        resultat, data, error = Pcan_ReadDID(Pcan, ligne['DID'], ligne['Size'])
         
         # Mettre à jour la ligne avec les résultats
         df_read.at[index, 'Resultat'] = resultat

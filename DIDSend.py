@@ -1,9 +1,6 @@
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from UDS.UDS_Frame import UDS_Frame 
 import time
-from UDS.Utils import *
+from UDS.utils import *
+from UDS.UDS_Frame import UDS_Frame 
 project="PR128"
 
 if __name__ == "__main__":
@@ -55,8 +52,6 @@ if __name__ == "__main__":
         Pcan = UDS_Frame(FileConfig=FileConfig)
 
         Pcan.StartSession(3)
-        print("81D6 " + str(Pcan.ReadDID("81D6")))
-        print(Pcan.WriteDID("81D6", [1]))
         print("8281 " + str(Pcan.ReadDID("8281")))
         print("8282 " + str(Pcan.ReadDID("8282")))
         print("8283 " + str(Pcan.ReadDID("8283")))
@@ -87,6 +82,7 @@ if __name__ == "__main__":
 
         Pcan.StartSession(2)
         time.sleep(2)
+        print(Pcan.WriteReadRequest([0x3E, 0x00], True))
         print("F012 " + str(Pcan.ReadDID("F012")))
         print("F180 " + str(Pcan.ReadDID("F180")))
         print("F182 " + str(Pcan.ReadDID("F182")))
@@ -109,3 +105,8 @@ if __name__ == "__main__":
         # print("F180 " + str(Pcan.ReadDID("F180")))
         # print("FD01 " + str(Pcan.ReadDID("FD01")))
         print("FD02 " + str(Pcan.ReadDID("FD02")))
+
+        print(Pcan.WriteReadRequest([0x19, 0x02, 0xFF], True))
+        print("8282 " + str(Pcan.ReadDID("8282")))
+        print(Pcan.WriteDID("F062", [3]))
+        print(Pcan.WriteDID("826A", [2]))

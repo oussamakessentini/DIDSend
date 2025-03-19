@@ -1,7 +1,7 @@
 import pandas as pd
 import csv
 import ast  # To safely convert string representation of list/dict
-from UDS.Utils import *
+from UDS.utils import *
 
 DIDStatusCsv = "DIDStatus.csv"
 DIDStatusExcel = 'DID_Status_PR128.xlsx'

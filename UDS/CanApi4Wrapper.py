@@ -1,9 +1,5 @@
-# import sys
-# import os
-# sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from CanApi4 import *
-import time
-from Utils import *
+from .CanApi4 import *
+from .utils import *
 
 class CanApi4Wrapper:
     def __init__(self, device=pcan_usb, client_name=b"PythonClient", net_name=b"ch1_500kb", IsCanFD=False, \
@@ -58,7 +54,28 @@ class CanApi4Wrapper:
         if result[0] != CAN_ERR_OK:
             self.get_error_text("ConnectToNet", result[0])
             print(f"Net Handle: {self.net_handle}, Net Name: {self.net_name}")
-            return False
+            print("List of available net:")
+            listNetwork = self.list_networks()
+            while True:
+                try:
+                    choice = int(input("Enter the number of your selection: ").strip())  # Convert input to int
+                    if choice in range(1, len(listNetwork)+1):
+                        print(f"You selected: {bytes(listNetwork[choice-1]).decode()}")
+                        if self.net_name != listNetwork[choice-1]:
+                            result = self.can_api.ConnectToNet(self.device, self.client_handle, listNetwork[choice-1])
+                            self.net_handle = result[1]
+                            if result[0] != CAN_ERR_OK:
+                                return False
+                            else:
+                                print(f"please update in config net_name with {bytes(listNetwork[choice-1]).decode()} instead of {bytes(self.net_name).decode()}")
+                                self.net_name = listNetwork[choice-1]
+                        break
+                    else:
+                        print(f"Invalid choice. Please enter a number between 1 and {len(listNetwork)}.")
+                        return False
+                except ValueError:
+                    print("Invalid input. Please enter a number.")
+                    return False
         
         # set read function to read only one frame at a time
         if self.setParam(CAN_PARAM_READ_MAX_RECORDCOUNT, CAN_PARAM_OBJCLASS_CLIENT, 1) == False:
@@ -195,6 +212,7 @@ class CanApi4Wrapper:
             self.get_error_text("GetAvailableHardware", result[0])
 
     def list_networks(self):
+        listNetwork = []
         for i in range(1, 65):  # CAN handles are usually between 1 and 64
             param = can_param_string255_t()
             param.size = sizeof(param)
@@ -205,7 +223,8 @@ class CanApi4Wrapper:
             result = self.can_api.GetParam(pcan_usb, param)
             if result[0] == CAN_ERR_OK:
                 print(f"Net {i}: {bytes(result[1].value).decode()}")
-
+                listNetwork.append(result[1].value)
+        return listNetwork
 # Example Usage
 if __name__ == "__main__":
     can_wrapper = CanApi4Wrapper(net_name=b"ch1_500kb", IsFiltered=False)

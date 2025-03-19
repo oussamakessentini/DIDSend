@@ -1,10 +1,7 @@
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from PCANBasicWrapper import PCANBasicWrapper
-from CanApi4Wrapper import CanApi4Wrapper
+from .PCANBasicWrapper import PCANBasicWrapper
+from .CanApi4Wrapper import CanApi4Wrapper
+from .utils import *
 import time
-from Utils import *
 
 class UDS_Frame():
 
@@ -186,20 +183,14 @@ class UDS_Frame():
             exit(0)
         
         data = []
-        data.append(0x2)
         data.append(0x10)
         data.append(number)
-        self.WriteMessages(self.TxId, data)
+        msg = self.WriteReadRequest(data)
 
-        startTime = time.time()
-        while ((time.time() - startTime) < self.timeout):
-            msg = self.ReadMessages()
-            if (msg != None) and (msg['data'][1] == 0x50) and (msg['data'][2] == number):
-                print ("Session activated...")
-                return True
-            elif self.IsFiltered == True:
-                time.sleep(0.1)
-        print("StartSession : Time out No Response")
+        if (msg["status"] == True):
+            print (f"Session {number} activated...")
+            return True
+        print(f"StartSession {number} : Time out No Response")
         return False
 
     def StartReset(self, rstReq):
@@ -209,29 +200,121 @@ class UDS_Frame():
             exit(0)
         
         data = []
-        data.append(0x2)
         data.append(0x11)
         data.append(rstReq)
-        self.WriteMessages(self.TxId, data)
+        msg = self.WriteReadRequest(data)
 
-        startTime = time.time()
-        while ((time.time() - startTime) < self.timeout):
-            msg = self.ReadMessages()
-            if (msg is not None) and (msg['id'] == self.RxId):
-                if (msg['data'][1] == 0x51) and (msg['data'][2] == rstReq):
-                    print("StartReset : OK")
-                    retState = True
-                    break
-                elif (msg['data'][1] == 0x7F) and (msg['data'][2] == 0x11):
-                    print("StartReset : NRC 0x71")
-                    retState = False
-                    break
-                elif self.IsFiltered == True:
-                    print("StartReset : Wait")
-                    time.sleep(0.01)
-                break
-        
+        if (msg["status"] == True):
+            print("StartReset : OK")
+            retState = True
+        else:
+            print("StartReset : NOK, " + msg["response"])
+            retState = False
+
         return retState
+    
+    def WriteReadRequest(self, data, InHex=False):
+        return_value = {"request" : data if InHex == False else [format_hex(item) for item in data], "response" : [],"status" : False}
+        if self.comOk == False:
+            print ("No Communication established")
+            exit(0)
+        try:
+            if len(data) < 8:  # Single Frame
+                sf_message = [len(data)] + data
+                self.WriteMessages(self.TxId, sf_message)
+            else:  # Multi-Frame Communication
+                total_length = len(data)
+                ff_payload = data[:6]
+                first_frame = [0x10 | ((total_length >> 8) & 0x0F), total_length & 0xFF] + ff_payload
+                self.WriteMessages(self.TxId, first_frame)
+
+                # Wait for Flow Control (FC)
+                start_time = time.time()
+                while time.time() - start_time < self.timeout:
+                    fc_message = self.ReadMessages()
+                    if fc_message and fc_message['id'] == self.RxId and fc_message['data'][0] == 0x30:
+                        block_size = fc_message['data'][1]
+                        st_min = fc_message['data'][2]
+                        break
+                    elif self.IsFiltered == True:
+                        time.sleep(0.1)
+                else:
+                    raise RuntimeError("No Flow Control received.")
+
+                # Send Consecutive Frames
+                seq_number = 1
+                data_remaining = data[6:]  # Remaining data after the First Frame
+                while data_remaining:
+                    cf_payload = data_remaining[:7]
+                    cf_message = [0x20 | seq_number] + cf_payload
+                    self.WriteMessages(self.TxId, cf_message)
+                    data_remaining = data_remaining[7:]
+                    seq_number = (seq_number + 1) % 16  # Sequence number wraps around
+
+                    # Wait for separation time (STmin)
+                    time.sleep(st_min / 1000.0)
+
+            response = []
+            dataResponse = []
+            sizeData = 0
+            frameReceived = False
+            responseCmdWait = 0
+            start_time = time.time()
+            while time.time() - start_time < self.timeout:
+                msg = self.ReadMessages()
+                if (msg is not None) and (msg['id'] == self.RxId):
+                    if (len(msg['data']) > 0):
+                        if (msg['data'][1] == 0x7F) and (msg['data'][2] == data[0]):
+                            error_code = msg['data'][3]
+                            if error_code != 0x78:
+                                raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
+                        elif (msg['data'][0]&0xF0 == 0x10):
+                            sizeData = ((msg['data'][0] & 0xF) << 8) + msg['data'][1]
+                            if verifyFrame(msg['data'][2:], data, min(sizeData, len(data))):
+                                dataRemaining = sizeData
+                                dataResponse.extend(msg['data'][2:])
+                                dataRemaining -= len(dataResponse)
+                                responseCmdWait = 1
+                                sf_message = [0x30]
+                                self.WriteMessages(self.TxId, sf_message)
+                            else:
+                                sizeData = 0
+                        elif (msg['data'][0]&0xF0 == 0x0):
+                            sizeData = msg['data'][0]
+                            if verifyFrame(msg['data'][1:], data, min(sizeData, len(data))):
+                                dataResponse = msg['data'][1:1+sizeData]
+                                frameReceived = True
+                            else:
+                                sizeData = 0
+                        elif (msg['data'][0]&0xF0 == 0x20):
+                            if (msg['data'][0]&0xF == responseCmdWait):
+                                if dataRemaining < 8:
+                                    dataResponse.extend(msg['data'][1:1+dataRemaining])
+                                    dataRemaining = 0
+                                else:
+                                    dataResponse.extend(msg['data'][1:8])
+                                    dataRemaining -= 7
+                                if dataRemaining == 0 and len(dataResponse) == sizeData:
+                                    frameReceived = True
+                                    responseCmdWait = 0
+                                responseCmdWait += 1
+                                responseCmdWait %= 16
+                        if (frameReceived):
+                            response = dataResponse if InHex == False else [format_hex(item) for item in dataResponse]
+                            return_value["response"] = response
+                            return_value["status"] = True
+                            break
+                elif self.IsFiltered == True:
+                    time.sleep(0.1)
+            if len(dataResponse) < sizeData:
+                raise RuntimeError(f"Data missing: not all data received only {len(dataResponse)} bytes is received expected {sizeData} bytes")
+            elif time.time() - start_time > self.timeout:
+                raise TimeoutError(f"Time out No Response")
+        except Exception as e:
+            return_value["response"] = e
+            return_value["status"] = False
+
+        return return_value
 
     def ReadDID(self, DID):
         """
@@ -254,79 +337,16 @@ class UDS_Frame():
             iDid = int(DID,16)
             iDidHigh = (iDid & 0xFF00) >> 8
             iDidLow = iDid & 0xFF
-            message = [3] + [0x22, iDidHigh, iDidLow]
-            self.WriteMessages(self.TxId, message)
-            
-            startTime = time.time()
-            DataSizeRemaining = 0
-            DataSize = 0
-            response = []
-            resp_ok = False
-
-            while ((time.time() - startTime) < self.timeout):
-                msg = self.ReadMessages()
-                # print(msg)
-                if (msg is not None) and (msg['id'] == self.RxId):
-                    
-                    if(msg['data'][1] == 0x62) and (msg['data'][2] == iDidHigh) and (msg['data'][3] == iDidLow):
-                        resp_ok = True
-                        DataSizeRemaining = msg['data'][0]
-                        DataSize = DataSizeRemaining - 3
-                        for i in range(4, DataSizeRemaining + 1):
-                            response.append(format_hex(msg['data'][i]))
-                        DataSizeRemaining = 0
-                        break
-
-                    # Check if the response is multi frame and extract the data
-                    elif (msg['data'][2] == 0x62) and (msg['data'][3] == iDidHigh) and (msg['data'][4] == iDidLow):
-                        resp_ok = True
-                        if ((msg['data'][0] >> 4) == 0x1):
-                            # Consecutive frame => parsing...
-                            DataSizeRemaining = ((msg['data'][0] & 0x0F) << 8) | msg['data'][1]
-                            DataSize = DataSizeRemaining - 3
-
-                            for i in range(5, 8):
-                                response.append(format_hex(msg['data'][i]))
-                            # print(response)
-                            DataSizeRemaining -= 6 # remove the first frame data (6 bytes)
-                            # print(DataSizeRemaining)
-                            sf_message = [0x30] # Request the next data
-                            self.WriteMessages(self.TxId, sf_message)
-
-                    # Retrive the next consecutive data
-                    elif (msg['data'][0] >= 0x20) and (msg['data'][0] <= 0x2F):
-                        range_temp = 0
-                        if(DataSizeRemaining >= 7) :
-                            range_temp = 7
-                            DataSizeRemaining -= 7
-                        else:
-                            range_temp = DataSizeRemaining
-                        
-                        for i in range(0, range_temp):
-                            response.append(format_hex(msg['data'][i+1]))
-                        # print(range_temp, DataSizeRemaining)
-
-                        # Check end of data to end the loop
-                        if(range_temp == DataSizeRemaining) or (DataSizeRemaining == 0):
-                            DataSizeRemaining = 0
-                            break
-
-                    elif (msg['data'][1] == 0x7F):
-                        error_code = msg['data'][3]
-                        if error_code != 0x78:
-                            raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
-
-                elif self.IsFiltered == True:
-                    time.sleep(0.1)
-            if (DataSizeRemaining != 0):
-                raise RuntimeError(f"Data missing: not all data received only {len(response)} bytes is received expected {DataSize} bytes")
-            elif(resp_ok == True):
-                return response
+            message = [0x22, iDidHigh, iDidLow]
+            data = self.WriteReadRequest(message, InHex=True)
+            if data["status"] == True:
+                return data["response"][3:]
             else:
-                raise TimeoutError(f"Time out No Response")
-        
+                return [f"Read {DID}", data["response"]]
+
         except Exception as e:
             return [f"Read {DID}", e]
+        return 
 
     def WriteDID(self, DID, data):
         """
@@ -356,52 +376,12 @@ class UDS_Frame():
 
             # Construct the first message payload
             message = [0x2E, did_high, did_low] + data
+            data = self.WriteReadRequest(message)
+            if data["status"] == True:
+                return [f"Write {DID}", True]
+            else:
+                return [f"Write {DID}", False, data["response"]]
 
-            if len(message) < 8:  # Single Frame
-                sf_message = [len(message)] + message
-                self.WriteMessages(self.TxId, sf_message)
-            else:  # Multi-Frame Communication
-                total_length = len(message)
-                ff_payload = message[:6]
-                first_frame = [0x10 | ((total_length >> 8) & 0x0F), total_length & 0xFF] + ff_payload
-                self.WriteMessages(self.TxId, first_frame)
-
-                # Wait for Flow Control (FC)
-                start_time = time.time()
-                while time.time() - start_time < self.timeout:
-                    fc_message = self.ReadMessages()
-                    if fc_message and fc_message['id'] == self.RxId and fc_message['data'][0] == 0x30:
-                        block_size = fc_message['data'][1]
-                        st_min = fc_message['data'][2]
-                        break
-                else:
-                    raise RuntimeError("No Flow Control received.")
-
-                # Send Consecutive Frames
-                seq_number = 1
-                data_remaining = message[6:]  # Remaining data after the First Frame
-                while data_remaining:
-                    cf_payload = data_remaining[:7]
-                    cf_message = [0x20 | seq_number] + cf_payload
-                    self.WriteMessages(self.TxId, cf_message)
-                    data_remaining = data_remaining[7:]
-                    seq_number = (seq_number + 1) % 16  # Sequence number wraps around
-
-                    # Wait for separation time (STmin)
-                    time.sleep(st_min / 1000.0)
-
-            # Wait for Positive Response (0x6E)
-            start_time = time.time()
-            while time.time() - start_time < self.timeout:
-                response = self.ReadMessages()
-                if response and response['id'] == self.RxId:
-                    if response['data'][1] == 0x6E and response['data'][2] == did_high and response['data'][3] == did_low:
-                        return [f"Write {DID}", True]
-                    elif response['data'][1] == 0x7F:
-                        error_code = response['data'][3]
-                        raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
-
-            raise TimeoutError(f"Time out No Response")
         except Exception as e:
             return [f"Write {DID}", False, e]
 
