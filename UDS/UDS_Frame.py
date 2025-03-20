@@ -1,6 +1,7 @@
 from .PCANBasicWrapper import PCANBasicWrapper
 from .CanApi4Wrapper import CanApi4Wrapper
 from .utils import *
+import pandas as pd
 import time
 
 class UDS_Frame():
@@ -125,6 +126,61 @@ class UDS_Frame():
 
         # Lookup the NRC byte
         return uds_nrc_codes.get(nrc_byte, "Unknown NRC code")
+    
+    def __get_UDS_type_frame(self, id_byte, Frame):
+        uds_service_classes = {
+            0x10: lambda: "SessionControlClass",
+            0x50: lambda: "SessionControlClassResponse",
+
+            0x27: lambda: "SecurityAccessClass",
+            0x67: lambda: "SecurityAccessClassResponse",
+
+            0x11: lambda: "EcuResetClass",
+            0x51: lambda: "EcuResetClassResponse",
+
+            0x19: lambda: "ReadDtcInformationClass",
+            0x59: lambda: "ReadDtcInformationClassResponse",
+
+            0x14: lambda: "ClearDiagnosticInformationClass",
+            0x54: lambda: "ClearDiagnosticInformationClassResponse",
+
+            0x22: lambda: f"ReadDataByIdentifierClass {Frame[1]:02X}{Frame[2]:02X}",
+            0x62: lambda: f"ReadDataByIdentifierClassResponse {Frame[1]:02X}{Frame[2]:02X}",
+
+            0x2E: lambda: f"WriteDataByIdentifierClass {Frame[1]:02X}{Frame[2]:02X}",
+            0x6E: lambda: f"WriteDataByIdentifierClassResponse {Frame[1]:02X}{Frame[2]:02X}",
+
+            0x2F: lambda: "IoControlClass",
+            0x6F: lambda: "IoControlClassResponse",
+
+            0x31: lambda: "RoutineControlClass",
+            0x71: lambda: "RoutineControlClassResponse",
+
+            0x36: lambda: "DataTransferClass",
+            0x76: lambda: "DataTransferClassResponse",
+
+            0x37: lambda: "TransferExitClass",
+            0x77: lambda: "TransferExitClassResponse",
+
+            0x34: lambda: "RequestDownloadClass",
+            0x74: lambda: "RequestDownloadClassResponse",
+
+            0x01: lambda: "RequestCurrentPowertrainDataClass",
+            0x41: lambda: "RequestCurrentPowertrainDataClassResponse",
+
+            0x02: lambda: "RequestPowertrainFreezeFrameDataClass",
+            0x42: lambda: "RequestPowertrainFreezeFrameDataClassResponse",
+
+            0x3E: lambda: "TesterPresentClass",
+            0x7E: lambda: "TesterPresentClassResponse",
+        }
+
+        # Convert to integer if input is a string with "0x"
+        if isinstance(id_byte, str) and id_byte.startswith("0x"):
+            id_byte = int(id_byte, 16)
+
+        # Lookup the NRC byte
+        return uds_service_classes.get(id_byte, lambda: "Unknown id class")()
 
     def __get_uds_rc_status_desc(self, rc_st_byte):
         """
@@ -219,6 +275,112 @@ class UDS_Frame():
             retState = False
 
         return retState
+
+    def __decodeFrame(self, data, size):
+        returnValue = ""
+        if data[0] == 0x7F:
+            returnValue += f"Negative response: Error code 0x{data[2]:02X}: {self.__get_uds_nrc_description(data[2])} for {self.__get_UDS_type_frame(data[1], data)}"
+        else:
+            returnValue += self.__get_UDS_type_frame(data[0], data)
+        if len(data) != size:
+            returnValue += f", Needed {size} Bytes, received only {len(data)} Bytes"
+        
+        return returnValue
+
+    def startCanStoringTrace(self, df=None, InHex=True):
+        if not isinstance(df, pd.DataFrame):
+            print("The object is NOT a pandas DataFrame.")
+            return
+        
+        row = { "id": "", \
+                "Data": [], \
+                "Type": "", \
+                "Size": 0, \
+                "Comments": ""}
+        dataResponse = []
+        sizeData = 0
+        frameReceived = False
+        responseCmdWait = 0
+        try:
+            while True:
+                msg = self.ReadMessages()
+                if (msg is not None):
+                    if (len(msg['data']) > 0):
+                        #if another frame is received different that the one waited
+                        if frameReceived == False and (row["id"] != "") and (msg['id'] != row["id"]) and (msg['data'][0] != 0x30):
+                            row["id"] = row['id'] if InHex == False else format_hex(row['id'])
+                            row["Data"] = dataResponse if InHex == False else [format_hex(item) for item in dataResponse]
+                            row["Size"] = sizeData
+                            row["Comments"] = self.__decodeFrame(dataResponse, sizeData)
+                            print(row)
+                            df.loc[len(df)] = row
+                            dataResponse = []
+                            sizeData = 0
+                            frameReceived = True
+
+                        # prepare new frame data
+                        if frameReceived == True:
+                            row = { "id": msg['id'], \
+                                    "Data": [], \
+                                    "Type": "TX" if self.TxId == msg["id"] else "RX" if self.RxId == msg["id"] else "", \
+                                    "Size": 0, \
+                                    "Comments": ""}
+                            frameReceived = False
+
+                        if (msg['data'][0]&0xF0 == 0x0):
+                            row["id"] = msg['id']
+                            sizeData = msg['data'][0]
+                            dataResponse = msg['data'][1:1+sizeData]
+                            frameReceived = True
+                        elif (msg['data'][1] == 0x7F):
+                            row["id"] = msg['id']
+                            sizeData = msg['data'][0]
+                            dataResponse = msg['data'][1:1+sizeData]
+                            frameReceived = True
+                            break
+                        elif (msg['data'][0]&0xF0 == 0x10):
+                            sizeData = ((msg['data'][0] & 0xF) << 8) + msg['data'][1]
+                            dataRemaining = sizeData
+                            dataResponse.extend(msg['data'][2:])
+                            dataRemaining -= len(dataResponse)
+                            row["id"] = msg['id']
+                            responseCmdWait = 1
+                        elif (row["id"] != "") and (msg['data'][0] == 0x30):
+                            # ask multi frame reception
+                            continue
+                        elif (msg['data'][0]&0xF0 == 0x20):
+                            if (msg['data'][0]&0xF == responseCmdWait):
+                                if dataRemaining < 8:
+                                    dataResponse.extend(msg['data'][1:1+dataRemaining])
+                                    dataRemaining = 0
+                                else:
+                                    dataResponse.extend(msg['data'][1:8])
+                                    dataRemaining -= 7
+                                if dataRemaining == 0 and len(dataResponse) == sizeData:
+                                    frameReceived = True
+                                    responseCmdWait = 0
+                                responseCmdWait += 1
+                                responseCmdWait %= 16
+                        if frameReceived == True:
+                            row["id"] = row['id'] if InHex == False else format_hex(row['id'])
+                            row["Data"] = dataResponse if InHex == False else [format_hex(item) for item in dataResponse]
+                            row["Size"] = sizeData
+                            row["Comments"] = self.__decodeFrame(dataResponse, sizeData)
+                            print(row)
+                            df.loc[len(df)] = row
+                            dataResponse = []
+                            sizeData = 0
+        except Exception as e:
+            print(f"Exception: {e}")
+        finally:
+            if frameReceived == False and sizeData != 0:
+                row["Data"] = dataResponse if InHex == False else [format_hex(item) for item in dataResponse]
+                row["Size"] = sizeData
+                row["Comments"] = self.__decodeFrame(dataResponse, sizeData)
+                print(row)
+                df.loc[len(df)] = row
+                dataResponse = []
+                sizeData = 0
     
     def WriteReadRequest(self, data, InHex=False):
         return_value = {"request" : data if InHex == False else [format_hex(item) for item in data], "response" : [],"status" : False}
@@ -311,8 +473,6 @@ class UDS_Frame():
                             return_value["response"] = response
                             return_value["status"] = True
                             break
-                elif self.IsFiltered == True:
-                    time.sleep(0.1)
             if len(dataResponse) < sizeData:
                 raise RuntimeError(f"Data missing: not all data received only {len(dataResponse)} bytes is received expected {sizeData} bytes")
             elif time.time() - start_time > self.timeout:

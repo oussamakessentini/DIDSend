@@ -162,7 +162,7 @@ class CanApi4Wrapper:
 
     def read(self):
         """Read a CAN message."""
-        return_value = {"id" : 0, "data" : [],"len" : 0}
+        return_value = {"id" : 0, "data" : [],"len" : 0, "timestamp" : 0}
         result = self.can_api.Read(self.device, self.client_handle, 1000)
         if result[0] == CAN_ERR_OK:
             data = bytearray(b & 0xFF for b in result[2])  # Convert negative values to unsigned
@@ -173,16 +173,19 @@ class CanApi4Wrapper:
                 msg = can_basemsg_t.from_buffer(data)
                 return_value["id"] = msg.id
                 return_value["len"] = msg.dlc
+                return_value["timestamp"] = msg.timestamp
             elif readPointer.type == CAN_RECORDTYPE_msg.value:
                 msg = can_msg_t.from_buffer(data)
                 return_value["id"] = msg.id
                 return_value["len"] = msg.dlc
                 return_value["data"] = msg.data.data[:msg.dlc]
+                return_value["timestamp"] = msg.timestamp
             elif readPointer.type == CAN_RECORDTYPE_msg_fd.value:
                 msg = can_msg_fd_t.from_buffer(data)
                 return_value["id"] = msg.id
                 return_value["len"] = msg.dlc
                 return_value["data"] = msg.data.data[:msg.dlc]
+                return_value["timestamp"] = msg.timestamp
  
         if result[0] == CAN_ERR_QRCVEMPTY:
             return None

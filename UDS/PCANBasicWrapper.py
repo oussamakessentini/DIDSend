@@ -152,7 +152,7 @@ class PCANBasicWrapper:
         if stsResult[0] != PCAN_ERROR_OK:
             self.get_error_text(stsResult[0])
             return None
-        return {"id" : stsResult[1].ID, "data" : stsResult[1].DATA,"len" : sizeData}
+        return {"id" : stsResult[1].ID, "data" : stsResult[1].DATA, "len" : sizeData, "timestamp": stsResult[2]}
 
     def uninitialize(self):
         """Disconnect from the CAN interface."""
