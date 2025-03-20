@@ -36,9 +36,9 @@ def load_config(obj_dest, globalVal, config_file, Encode=False):
             flatten_dict(data, globalVal, config, Encode=Encode)
 
             for item, value in data.items():
-                if isinstance(obj_dest, Mapping):
+                if isinstance(obj_dest, Mapping) and obj_dest[item] is None:
                     obj_dest[item] = value
-                elif hasattr(obj_dest, item):
+                elif hasattr(obj_dest, item) and getattr(obj_dest, item) is None:
                     setattr(obj_dest, item, value)
     except Exception as e:
         print(f"Cannot Access Config file {config_file} Exception: {str(e)}" )

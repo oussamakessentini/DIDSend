@@ -3,9 +3,9 @@ from .utils import *
 import time
 
 class PCANBasicWrapper:
-    def __init__(self, FileConfig=None, PcanHandle="PCAN_USBBUS1", IsCanFD=False, Bitrate="PCAN_BAUD_500K", \
-                 BitrateFD=b'f_clock_mhz=20, nom_brp=5, nom_tseg1=2, nom_tseg2=1, nom_sjw=1, data_brp=2, data_tseg1=3, data_tseg2=1, data_sjw=1', \
-                 TxID=0x18DADBF1, RxID=0x18DAF1DB, IsExtended=True, IsFiltered=True, IsPadded=False):
+    def __init__(self, FileConfig=None, PcanHandle=None, IsCanFD=None, Bitrate=None, \
+                 BitrateFD=None, \
+                 TxID=None, RxID=None, IsExtended=None, IsFiltered=None, IsPadded=None):
         """
         Create an object starts the programm
         """
@@ -13,14 +13,14 @@ class PCANBasicWrapper:
         self.comOk = False
 
         # Sets the PCANHandle (Hardware Channel)
-        if PcanHandle in globals():
+        if PcanHandle is not None and PcanHandle in globals():
             self.PcanHandle = globals()[PcanHandle]
         else:
             print(f"Variable '{PcanHandle}' not found.")
             return
 
         # Sets the bitrate for normal CAN devices
-        if Bitrate in globals():
+        if Bitrate is not None and Bitrate in globals():
             self.Bitrate = globals()[Bitrate]
         else:
             print(f"Variable '{Bitrate}' not found.")
@@ -50,6 +50,13 @@ class PCANBasicWrapper:
         # get the configuration from file
         if FileConfig != None:
             load_config(self, globals(), FileConfig, Encode=True)
+        NoneData = []
+        for itemName in self.__dict__.keys():
+            if getattr(self, itemName) is None:
+                NoneData.append(itemName)
+        if len(NoneData) != 0:
+            print (f"PCANBasicWrapper: Please define these attributes in function call or in config file: {NoneData}")
+            exit(0)
 
         # CAN Message Configuration
         if self.IsExtended == True:
@@ -294,7 +301,8 @@ class PCANBasicWrapper:
 
 # Example Usage
 if __name__ == "__main__":
-    PcanBasic_wrapper = PCANBasicWrapper()
+    FileConfig=loadConfigFilePath()
+    PcanBasic_wrapper = PCANBasicWrapper(FileConfig=FileConfig)
     if PcanBasic_wrapper.initialize():
         print("CAN Initialized Successfully")
         PcanBasic_wrapper.write(1, [0x10, 0x03])

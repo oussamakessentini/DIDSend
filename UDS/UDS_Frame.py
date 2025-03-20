@@ -8,7 +8,7 @@ class UDS_Frame():
     # Shows if DLL was found
     m_DLLFound = False
 
-    def __init__(self, IsCanFD=False, TxID=0x18DADBF1, RxID=0x18DAF1DB, IsExtended=True, IsFiltered=True, IsPadded=False, PcanLib="CanApi4Lib", FileConfig=None):
+    def __init__(self, IsCanFD=None, TxID=None, RxID=None, IsExtended=None, IsFiltered=None, IsPadded=None, PcanLib=None, FileConfig=None):
         """
         Create an object starts the programm
         """
@@ -23,6 +23,13 @@ class UDS_Frame():
         # get the configuration from file
         if FileConfig != None:
             load_config(self, globals(), FileConfig)
+        NoneData = []
+        for itemName in self.__dict__.keys():
+            if getattr(self, itemName) is None:
+                NoneData.append(itemName)
+        if len(NoneData) != 0:
+            print (f"UDS_Frame: Please define these attributes in function call or in config file: {NoneData}")
+            exit(0)
 
         if self.PcanLib == "PCANBasicLib":
             # load PCanBasic Wrapper
@@ -32,7 +39,7 @@ class UDS_Frame():
             self.m_objWrapper = CanApi4Wrapper(FileConfig=FileConfig, TxID=TxID, RxID=RxID, IsCanFD=IsCanFD, IsExtended=IsExtended, IsPadded=IsPadded, IsFiltered=IsFiltered)
         else:
             print ("Please define the correct PCANLib to use (PCANBasic or CanApi4) ")
-            return
+            exit(0)
 
         if self.m_objWrapper.m_DLLFound == False:
             print("Can Wrapper class instanciation error")

@@ -2,8 +2,8 @@ from .CanApi4 import *
 from .utils import *
 
 class CanApi4Wrapper:
-    def __init__(self, device=pcan_usb, client_name=b"PythonClient", net_name=b"ch1_500kb", IsCanFD=False, \
-                 TxID=0x18DADBF1, RxID=0x18DAF1DB, IsExtended=True, IsFiltered=True, IsPadded=False, FileConfig=None):
+    def __init__(self, device=None, client_name=None, net_name=None, IsCanFD=None, \
+                 TxID=None, RxID=None, IsExtended=None, IsFiltered=None, IsPadded=None, FileConfig=None):
         self.comOk = False
 
         self.device = device
@@ -22,6 +22,13 @@ class CanApi4Wrapper:
         # get the configuration from file
         if FileConfig != None:
             load_config(self, globals(), FileConfig, Encode=True)
+        NoneData = []
+        for itemName in self.__dict__.keys():
+            if getattr(self, itemName) is None:
+                NoneData.append(itemName)
+        if len(NoneData) != 0:
+            print (f"CanApi4Wrapper: Please define these attributes in function call or in config file: {NoneData}")
+            exit(0)
 
         self.minRange = 0
         # CAN Message Configuration
@@ -227,7 +234,8 @@ class CanApi4Wrapper:
         return listNetwork
 # Example Usage
 if __name__ == "__main__":
-    can_wrapper = CanApi4Wrapper(net_name=b"ch1_500kb", IsFiltered=False)
+    FileConfig=loadConfigFilePath()
+    can_wrapper = CanApi4Wrapper(FileConfig=FileConfig, IsFiltered=False)
     if can_wrapper.initialize():
         print("CAN Initialized Successfully")
         while True:
