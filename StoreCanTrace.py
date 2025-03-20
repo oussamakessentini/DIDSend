@@ -9,10 +9,11 @@ if __name__ == "__main__":
 
     InHex = True
 
-    TraceCanExcel = "TraceCanExcel.xlsx"
+    FileTraceCanName = "TraceCanExcel"
 
     # Create an initial DataFrame
     df = pd.DataFrame(columns=["ID", "Raw_Data", "Type", "Size", "Comments"])
+    IndexFile = 1
 
     while True:
         try:
@@ -26,7 +27,14 @@ if __name__ == "__main__":
                 print(row)
                 df.loc[len(df)] = row
         except KeyboardInterrupt:
-            print(f"Storing trace to {TraceCanExcel}")
-            with pd.ExcelWriter(TraceCanExcel, engine='openpyxl', mode='w') as writer:
+            FileTraceCanNameTemp = FileTraceCanName+f"_{IndexFile}.xlsx"
+            IndexFile+=1
+            print(f"Storing trace to {FileTraceCanNameTemp}")
+            with pd.ExcelWriter(FileTraceCanNameTemp, engine='openpyxl', mode='w') as writer:
                 df.to_excel(writer, sheet_name='Trace', index=False)
-            exit(0)
+            df = df.drop(df.index)
+
+            user_input = input("Enter: e to exit else enter anything")
+            if user_input == "e":
+                print("End of Program")
+                exit(0)
