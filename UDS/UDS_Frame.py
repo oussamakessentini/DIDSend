@@ -127,7 +127,8 @@ class UDS_Frame():
         # Lookup the NRC byte
         return uds_nrc_codes.get(nrc_byte, "Unknown NRC code")
     
-    def __get_UDS_type_frame(self, id_byte, Frame):
+    def __get_UDS_type_frame(self, id_byte, Frame, negativeRequest=False):
+        decodeFrame = f"{Frame[1]:02X}{Frame[2]:02X}" if negativeRequest == False else ""
         uds_service_classes = {
             0x10: lambda: "SessionControlClass",
             0x50: lambda: "SessionControlClassResponse",
@@ -144,11 +145,11 @@ class UDS_Frame():
             0x14: lambda: "ClearDiagnosticInformationClass",
             0x54: lambda: "ClearDiagnosticInformationClassResponse",
 
-            0x22: lambda: f"ReadDataByIdentifierClass {Frame[1]:02X}{Frame[2]:02X}",
-            0x62: lambda: f"ReadDataByIdentifierClassResponse {Frame[1]:02X}{Frame[2]:02X}",
+            0x22: lambda: f"ReadDataByIdentifierClass {decodeFrame}",
+            0x62: lambda: f"ReadDataByIdentifierClassResponse {decodeFrame}",
 
-            0x2E: lambda: f"WriteDataByIdentifierClass {Frame[1]:02X}{Frame[2]:02X}",
-            0x6E: lambda: f"WriteDataByIdentifierClassResponse {Frame[1]:02X}{Frame[2]:02X}",
+            0x2E: lambda: f"WriteDataByIdentifierClass {decodeFrame}",
+            0x6E: lambda: f"WriteDataByIdentifierClassResponse {decodeFrame}",
 
             0x2F: lambda: "IoControlClass",
             0x6F: lambda: "IoControlClassResponse",
@@ -279,7 +280,7 @@ class UDS_Frame():
     def __decodeFrame(self, data, size):
         returnValue = ""
         if data[0] == 0x7F:
-            returnValue += f"Negative response: Error code 0x{data[2]:02X}: {self.__get_uds_nrc_description(data[2])} for {self.__get_UDS_type_frame(data[1], data)}"
+            returnValue += f"Negative response: Error code 0x{data[2]:02X}: {self.__get_uds_nrc_description(data[2])} for {self.__get_UDS_type_frame(data[1], data, negativeRequest=True)}"
         else:
             returnValue += self.__get_UDS_type_frame(data[0], data)
         if len(data) != size:

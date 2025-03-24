@@ -29,8 +29,8 @@ if __name__ == "__main__":
             df = df.drop(df.index)
 
             try:
-                user_input = input("Enter: e to exit else enter anything : ")
-                if user_input == "e":
+                user_input = input("Enter: c and Enter to continue else Enter to exit")
+                if user_input != "c":
                     print("End of Program")
                     exit(0)
             except KeyboardInterrupt:
