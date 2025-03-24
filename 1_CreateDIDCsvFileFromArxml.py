@@ -32,23 +32,6 @@ def extractOsTaskWithIndex(file_path):
 
     return enums
 
-def remove_namespace(tree):
-    root = tree.getroot()
-    for elem in root.iter():
-        elem.tag = re.sub(r'\{.*?\}', '', elem.tag)  # Supprimer les namespaces
-    return tree
-
-def find_recursive(element, tag):
-    """Recherche récursive du premier élément avec le tag donné."""
-    found = element.find(tag)
-    if found is not None:
-        return found
-    for child in element:
-        found = find_recursive(child, tag)
-        if found is not None:
-            return found
-    return None
-
 def extract_did_data(file_path):
     # parse ARXML File and extract data
     tree = ET.parse(file_path)

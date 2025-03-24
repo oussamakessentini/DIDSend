@@ -1,6 +1,7 @@
 import yaml
 import os
 from collections.abc import Mapping
+import re
 
 Global_config_file = "Config.yml"
 
@@ -113,3 +114,28 @@ def verifyFrame(dataReceived, dataSent, size):
             if (dataReceived[i] != dataSent[i]):
                 resultStatus = False
     return resultStatus
+
+def remove_namespace(tree):
+    root = tree.getroot()
+    namespace = root.tag.split('}')[0].strip('{') if '}' in root.tag else ''
+    for elem in root.iter():
+        elem.tag = re.sub(r'\{.*?\}', '', elem.tag)  # Remove namespace
+    return tree, namespace
+
+def restore_namespace(tree, namespace):
+    if namespace:
+        root = tree.getroot()
+        for elem in root.iter():
+            elem.tag = f'{{{namespace}}}' + elem.tag
+    return tree
+
+def find_recursive(element, tag):
+    """Recherche récursive du premier élément avec le tag donné."""
+    found = element.find(tag)
+    if found is not None:
+        return found
+    for child in element:
+        found = find_recursive(child, tag)
+        if found is not None:
+            return found
+    return None

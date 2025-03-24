@@ -483,7 +483,7 @@ class UDS_Frame():
 
         return return_value
 
-    def ReadDID(self, DID):
+    def ReadDID(self, DID, decode=None):
         """
         Read data from a specified DID using UDS ReadDataByIdentifier (0x22) with multi-frame support.
 
@@ -505,9 +505,12 @@ class UDS_Frame():
             iDidHigh = (iDid & 0xFF00) >> 8
             iDidLow = iDid & 0xFF
             message = [0x22, iDidHigh, iDidLow]
-            data = self.WriteReadRequest(message, InHex=True)
+            data = self.WriteReadRequest(message, InHex=True if decode is None else False)
             if data["status"] == True:
-                return data["response"][3:]
+                if decode is None:
+                    return data["response"][3:]
+                else:
+                    return bytes(data["response"][3:]).decode(decode)
             else:
                 return [f"Read {DID}", data["response"]]
 
