@@ -12,7 +12,7 @@ Diag UDS Tools is a set of tools for executing UDS (Unified Diagnostic Services)
 ## TO DO List
 1. Add routine control in Excel file and extract them from the project
 2. Add Binary flash to UDS class
-3. Add DTC Managing (Erase DTC, Display DTC)
+3. Add DTC check in Excel file and extract them from the project 
 
 ## Installation
 ### Prerequisites
