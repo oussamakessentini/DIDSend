@@ -1,10 +1,13 @@
 import time
+import os
 from UDS.UDS_Frame import UDS_Frame 
 from UDS.utils import *
-project="PR128"
+
+project = None
 
 if __name__ == "__main__":
-    FileConfig=loadConfigFilePath()
+    dir_name = os.path.dirname(os.path.abspath(__file__))
+    FileConfig=loadConfigFilePath(dir_name)
     load_config(globals(), globals(), FileConfig)
     
     if(project == 'PR105'):
@@ -50,7 +53,6 @@ if __name__ == "__main__":
         
     else:
         Pcan = UDS_Frame(FileConfig=FileConfig)
-
         Pcan.StartSession(3)
         print("8281 " + str(Pcan.ReadDID("8281")))
         print("8282 " + str(Pcan.ReadDID("8282")))

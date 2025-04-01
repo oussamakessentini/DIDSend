@@ -15,6 +15,8 @@ class PCANBasicWrapper:
         # Sets the PCANHandle (Hardware Channel)
         if PcanHandle is not None and PcanHandle in globals():
             self.PcanHandle = globals()[PcanHandle]
+        elif PcanHandle is None:
+            self.PcanHandle = PcanHandle
         else:
             print(f"Variable '{PcanHandle}' not found.")
             return
@@ -22,6 +24,8 @@ class PCANBasicWrapper:
         # Sets the bitrate for normal CAN devices
         if Bitrate is not None and Bitrate in globals():
             self.Bitrate = globals()[Bitrate]
+        elif Bitrate is None:
+            self.Bitrate = Bitrate
         else:
             print(f"Variable '{Bitrate}' not found.")
             return
@@ -118,8 +122,8 @@ class PCANBasicWrapper:
         if self.IsCanFD:
             msgCanMessageFD = TPCANMsgFD()
             msgCanMessageFD.ID = can_id
-            msgCanMessageFD.DLC = 15
-            msgCanMessageFD.MSGTYPE = PCAN_MESSAGE_FD.value | PCAN_MESSAGE_BRS.value
+            msgCanMessageFD.DLC = get_dlc_for_data_length(len(data)) if len(data) > 8 or not self.IsPadded else 8
+            msgCanMessageFD.MSGTYPE = PCAN_MESSAGE_FD.value | PCAN_MESSAGE_BRS.value | (PCAN_MESSAGE_EXTENDED.value if self.IsCanFD else PCAN_MESSAGE_STANDARD.value)
             for i in range(len(data)):
                 msgCanMessageFD.DATA[i] = data[i]
             stsResult = self.m_objPCANBasic.WriteFD(self.PcanHandle, msgCanMessageFD)
@@ -143,7 +147,7 @@ class PCANBasicWrapper:
         sizeData = 0
         if self.IsCanFD:
             stsResult = self.m_objPCANBasic.ReadFD(self.PcanHandle)
-            sizeData = stsResult[1].DLC
+            sizeData = dlc_to_data_size(stsResult[1].DLC)
         else:
             stsResult = self.m_objPCANBasic.Read(self.PcanHandle)
             sizeData = stsResult[1].LEN

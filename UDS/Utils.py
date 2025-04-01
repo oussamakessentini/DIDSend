@@ -27,6 +27,28 @@ def isBetween(A, B, C):
     Ma = max(B, C)
     return Mi <= A <= Ma
 
+def dlc_to_data_size(dlc):
+    """Convert CAN FD DLC to actual data length."""
+    dlc_map = {
+        0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8,
+        9: 12, 10: 16, 11: 20, 12: 24, 13: 32, 14: 48, 15: 64
+    }
+    return dlc_map.get(dlc, -1)
+
+def get_dlc_for_data_length(data_length):
+    """Return the smallest DLC value that can accommodate the given data length in CAN FD."""
+    dlc_map = [
+        (0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8),
+        (9, 12), (10, 16), (11, 20), (12, 24), (13, 32), (14, 48), (15, 64)
+    ]
+
+    for dlc, size in dlc_map:
+        if data_length <= size:
+            return dlc  # Return the DLC that fits the data length
+
+    return -1  # If the length is out of range
+
+
 def load_config(obj_dest, globalVal, config_file, Encode=False):
     """Load configuration from a YAML file."""
     try:
@@ -37,7 +59,7 @@ def load_config(obj_dest, globalVal, config_file, Encode=False):
             flatten_dict(data, globalVal, config, Encode=Encode)
 
             for item, value in data.items():
-                if isinstance(obj_dest, Mapping) and obj_dest[item] is None:
+                if isinstance(obj_dest, Mapping) and obj_dest.get(item, "") is None:
                     obj_dest[item] = value
                 elif hasattr(obj_dest, item) and getattr(obj_dest, item) is None:
                     setattr(obj_dest, item, value)
@@ -99,11 +121,10 @@ def flatten_dict(obj_dest, globalVal, dictionary, Encode=False):
         except Exception as e:
             print(f"Cannot set var Exception: {str(e)}" )
 
-def loadConfigFilePath():
-    with open(Global_config_file, "r") as file:
+def loadConfigFilePath(localPath=""):
+    with open(os.path.join(localPath, Global_config_file), "r") as file:
         config = yaml.safe_load(file)
-        dir_name = os.path.dirname(os.path.abspath(__file__))
-        path_fileConfig = os.path.join(dir_name + "/../", config["configFile"])
+        path_fileConfig = os.path.join(localPath, config["configFile"])
         return path_fileConfig
 
 def verifyFrame(dataReceived, dataSent, size):

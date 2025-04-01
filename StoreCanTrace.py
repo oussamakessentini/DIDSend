@@ -1,9 +1,11 @@
+import os
 from UDS.UDS_Frame import UDS_Frame 
 from UDS.utils import *
 import pandas as pd
 
 if __name__ == "__main__":
-    FileConfig=loadConfigFilePath()
+    dir_name = os.path.dirname(os.path.abspath(__file__))
+    FileConfig = loadConfigFilePath(dir_name)
 
     Pcan = UDS_Frame(FileConfig=FileConfig, IsFiltered=True)
 

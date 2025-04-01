@@ -20,6 +20,7 @@ class UDS_Frame():
         self.timeout = 2
         self.IsFiltered = IsFiltered
         self.PcanLib = PcanLib
+        self.IsCanFD =IsCanFD
 
         # get the configuration from file
         if FileConfig != None:
@@ -128,7 +129,7 @@ class UDS_Frame():
         return uds_nrc_codes.get(nrc_byte, "Unknown NRC code")
     
     def __get_UDS_type_frame(self, id_byte, Frame, negativeRequest=False):
-        decodeFrame = f"{Frame[1]:02X}{Frame[2]:02X}" if negativeRequest == False else ""
+        decodeFrame = f"{Frame[1]:02X}{Frame[2]:02X}" if len(Frame) > 2 and negativeRequest == False else ""
         uds_service_classes = {
             0x10: lambda: "SessionControlClass",
             0x50: lambda: "SessionControlClassResponse",
@@ -309,6 +310,7 @@ class UDS_Frame():
                     if (len(msg['data']) > 0):
                         #if another frame is received different that the one waited
                         if frameReceived == False and (row["id"] != "") and (msg['id'] != row["id"]) and (msg['data'][0] != 0x30):
+                            row["Type"] = "TX" if self.TxId == row["id"] else "RX" if self.RxId == row["id"] else ""
                             row["id"] = row['id'] if InHex == False else format_hex(row['id'])
                             row["Data"] = dataResponse if InHex == False else [format_hex(item) for item in dataResponse]
                             row["Size"] = sizeData
@@ -323,15 +325,21 @@ class UDS_Frame():
                         if frameReceived == True:
                             row = { "id": msg['id'], \
                                     "Data": [], \
-                                    "Type": "TX" if self.TxId == msg["id"] else "RX" if self.RxId == msg["id"] else "", \
+                                    "Type": "", \
                                     "Size": 0, \
                                     "Comments": ""}
                             frameReceived = False
 
                         if (msg['data'][0]&0xF0 == 0x0):
                             row["id"] = msg['id']
-                            sizeData = msg['data'][0]
-                            dataResponse = msg['data'][1:1+sizeData]
+                            if ((msg['len']) <= 8):
+                                sizeData = msg['data'][0]
+                                dataResponse = msg['data'][1:1+sizeData]
+                                frameReceived = True
+                            else:
+                                sizeData = ((msg['data'][0] & 0xF) << 8) + msg['data'][1]
+                                dataResponse = msg['data'][2:2+sizeData]
+                                frameReceived = True
                             frameReceived = True
                         elif (msg['data'][1] == 0x7F):
                             row["id"] = msg['id']
@@ -351,18 +359,19 @@ class UDS_Frame():
                             continue
                         elif (msg['data'][0]&0xF0 == 0x20):
                             if (msg['data'][0]&0xF == responseCmdWait):
-                                if dataRemaining < 8:
+                                if dataRemaining < len(msg['data']):
                                     dataResponse.extend(msg['data'][1:1+dataRemaining])
                                     dataRemaining = 0
                                 else:
-                                    dataResponse.extend(msg['data'][1:8])
-                                    dataRemaining -= 7
+                                    dataResponse.extend(msg['data'][1:])
+                                    dataRemaining -= len(msg['data'][1:])
                                 if dataRemaining == 0 and len(dataResponse) == sizeData:
                                     frameReceived = True
                                     responseCmdWait = 0
                                 responseCmdWait += 1
                                 responseCmdWait %= 16
                         if frameReceived == True:
+                            row["Type"] = "TX" if self.TxId == row["id"] else "RX" if self.RxId == row["id"] else ""
                             row["id"] = row['id'] if InHex == False else format_hex(row['id'])
                             row["Data"] = dataResponse if InHex == False else [format_hex(item) for item in dataResponse]
                             row["Size"] = sizeData
@@ -375,6 +384,8 @@ class UDS_Frame():
             print(f"Exception: {e}")
         finally:
             if frameReceived == False and sizeData != 0:
+                row["Type"] = "TX" if self.TxId == row["id"] else "RX" if self.RxId == row["id"] else ""
+                row["id"] = row['id'] if InHex == False else format_hex(row['id'])
                 row["Data"] = dataResponse if InHex == False else [format_hex(item) for item in dataResponse]
                 row["Size"] = sizeData
                 row["Comments"] = self.__decodeFrame(dataResponse, sizeData)
@@ -389,12 +400,13 @@ class UDS_Frame():
             print ("No Communication established")
             exit(0)
         try:
-            if len(data) < 8:  # Single Frame
+            max_Frame = 64 if self.IsCanFD else 8
+            if len(data) < max_Frame:  # Single Frame
                 sf_message = [len(data)] + data
                 self.WriteMessages(self.TxId, sf_message)
             else:  # Multi-Frame Communication
                 total_length = len(data)
-                ff_payload = data[:6]
+                ff_payload = data[:max_Frame - 2]
                 first_frame = [0x10 | ((total_length >> 8) & 0x0F), total_length & 0xFF] + ff_payload
                 self.WriteMessages(self.TxId, first_frame)
 
@@ -413,12 +425,12 @@ class UDS_Frame():
 
                 # Send Consecutive Frames
                 seq_number = 1
-                data_remaining = data[6:]  # Remaining data after the First Frame
+                data_remaining = data[max_Frame - 2:]  # Remaining data after the First Frame
                 while data_remaining:
-                    cf_payload = data_remaining[:7]
+                    cf_payload = data_remaining[:max_Frame - 1]
                     cf_message = [0x20 | seq_number] + cf_payload
                     self.WriteMessages(self.TxId, cf_message)
-                    data_remaining = data_remaining[7:]
+                    data_remaining = data_remaining[max_Frame - 1:]
                     seq_number = (seq_number + 1) % 16  # Sequence number wraps around
 
                     # Wait for separation time (STmin)
@@ -450,20 +462,28 @@ class UDS_Frame():
                             else:
                                 sizeData = 0
                         elif (msg['data'][0]&0xF0 == 0x0):
-                            sizeData = msg['data'][0]
-                            if verifyFrame(msg['data'][1:], data, min(sizeData, len(data))):
-                                dataResponse = msg['data'][1:1+sizeData]
-                                frameReceived = True
+                            if ((msg['len']) <= 8):
+                                sizeData = msg['data'][0]
+                                if verifyFrame(msg['data'][1:], data, min(sizeData, len(data))):
+                                    dataResponse = msg['data'][1:1+sizeData]
+                                    frameReceived = True
+                                else:
+                                    sizeData = 0
                             else:
-                                sizeData = 0
+                                sizeData = ((msg['data'][0] & 0xF) << 8) + msg['data'][1]
+                                if verifyFrame(msg['data'][2:], data, min(sizeData, len(data))):
+                                    dataResponse = msg['data'][2:2+sizeData]
+                                    frameReceived = True
+                                else:
+                                    sizeData = 0
                         elif (msg['data'][0]&0xF0 == 0x20):
                             if (msg['data'][0]&0xF == responseCmdWait):
-                                if dataRemaining < 8:
+                                if dataRemaining < len(msg['data']):
                                     dataResponse.extend(msg['data'][1:1+dataRemaining])
                                     dataRemaining = 0
                                 else:
-                                    dataResponse.extend(msg['data'][1:8])
-                                    dataRemaining -= 7
+                                    dataResponse.extend(msg['data'][1:])
+                                    dataRemaining -= len(msg['data'][1:])
                                 if dataRemaining == 0 and len(dataResponse) == sizeData:
                                     frameReceived = True
                                     responseCmdWait = 0
@@ -511,7 +531,7 @@ class UDS_Frame():
                 if decode is None:
                     return data["response"][3:]
                 else:
-                    return bytes(data["response"][3:]).decode(decode)
+                    return bytes(data["response"][3:]).decode(decode, errors='ignore').rstrip('\x00')
             else:
                 return [f"Read {DID}", data["response"]]
 

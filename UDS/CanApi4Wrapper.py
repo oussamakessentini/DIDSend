@@ -127,7 +127,7 @@ class CanApi4Wrapper:
         return True
 
     def set_msg_dlc(self, msg_type, size):
-        max_dlc = 15 if msg_type == CAN_RECORDTYPE_msg_fd.value else 8
+        max_dlc = (get_dlc_for_data_length(size) if size > 8 or not self.IsPadded else 8) if msg_type == CAN_RECORDTYPE_msg_fd.value else 8
         if self.IsPadded:
             return max_dlc
         return size if 0 <= size <= max_dlc else None
@@ -140,15 +140,14 @@ class CanApi4Wrapper:
         if self.IsCanFD:
             my_msg = can_msg_fd_t()
             my_msg.type = CAN_RECORDTYPE_msg_fd.value
-            print(str.format("Make sure that {0} is a CAN FD net, otherwise CAN_Write returns\n" +
-                            "the error ILLPARAMVAL\n", bytes.decode(self.net_name)))
+            my_msg.msgtype = CAN_MSGTYPE_BRS
         else:
             my_msg = can_msg_t()
             my_msg.type = CAN_RECORDTYPE_msg.value
 
         my_msg.size = sizeof(my_msg)
         my_msg.id = can_id
-        my_msg.msgtype = self.typeExtended
+        my_msg.msgtype |= self.typeExtended
         my_msg.dlc = self.set_msg_dlc(my_msg.type, len(data))
         my_msg.data.data[:len(data)] = data
         my_msg.client = self.client_handle
@@ -183,8 +182,8 @@ class CanApi4Wrapper:
             elif readPointer.type == CAN_RECORDTYPE_msg_fd.value:
                 msg = can_msg_fd_t.from_buffer(data)
                 return_value["id"] = msg.id
-                return_value["len"] = msg.dlc
-                return_value["data"] = msg.data.data[:msg.dlc]
+                return_value["len"] = dlc_to_data_size(msg.dlc)
+                return_value["data"] = msg.data.data[:dlc_to_data_size(msg.dlc)]
                 return_value["timestamp"] = msg.timestamp
  
         if result[0] == CAN_ERR_QRCVEMPTY:
