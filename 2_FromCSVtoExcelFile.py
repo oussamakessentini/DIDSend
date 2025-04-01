@@ -3,12 +3,13 @@ import csv
 import ast  # To safely convert string representation of list/dict
 from UDS.utils import *
 
-DIDStatusCsv = "DIDStatus.csv"
-DIDStatusExcel = 'DID_Status_PR128.xlsx'
+DIDStatusCsv = None
+DIDStatusExcel = None
 
 if __name__ == "__main__":
     # replace local variable with the config 
-    FileConfig = loadConfigFilePath()
+    dir_name = os.path.dirname(os.path.abspath(__file__))
+    FileConfig = loadConfigFilePath(dir_name)
     load_config(globals(), globals(), FileConfig)
     
     # Open and read the CSV file

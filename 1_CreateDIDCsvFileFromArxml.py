@@ -3,9 +3,9 @@ import re
 import os
 from UDS.utils import *
 
-DIDStatusCsv = "./DIDStatus.csv"
-PathToDextArxml = "../BmsGen2_Copy/Inputs/DEXT/BMS_AW010700.arxml"
-pathToAssemblyConnectionDID = "../BmsGen2_Copy/Inputs/DEXT/Dext_Connections.arxml"
+DIDStatusCsv = None
+PathToDextArxml = None
+pathToAssemblyConnectionDID = None
 
 def extractOsTaskWithIndex(file_path):
     # use regex Read and Write function extract
@@ -35,7 +35,7 @@ def extractOsTaskWithIndex(file_path):
 def extract_did_data(file_path):
     # parse ARXML File and extract data
     tree = ET.parse(file_path)
-    tree = remove_namespace(tree)
+    tree, NULL = remove_namespace(tree)
     root = tree.getroot()
     
     did_data = []
@@ -67,7 +67,7 @@ def extract_did_data(file_path):
 def extract_did_connection(file_path):
     # parse ARXML File and extract data
     tree = ET.parse(file_path)
-    tree = remove_namespace(tree)
+    tree, NULL = remove_namespace(tree)
     root = tree.getroot()
     
     connection_data = []
@@ -135,16 +135,16 @@ def writeIntoCSV(data):
         with open(path_DIDList, "w") as f:
             f.write("DID;DID_SIZE;Read;Write;Variable\n")
             for item in data:
-                f.write(f"{item.get('DID_INDEX', '')};{item.get('DID_SIZE', '')};{item.get('Read', '')};{item.get('Write', '')};{item["DID_VARS"]}\n")
+                f.write(f"{item.get('DID_INDEX', '')};{item.get('DID_SIZE', '')};{item.get('Read', '')};{item.get('Write', '')};{item.get('DID_VARS', '')}\n")
     except Exception as e:
         print(str(e))
 
 if __name__ == "__main__":
     # replace local variable with the config 
-    FileConfig = loadConfigFilePath()
+    dir_name = os.path.dirname(os.path.abspath(__file__))
+    FileConfig = loadConfigFilePath(dir_name)
     load_config(globals(), globals(), FileConfig)
 
-    dir_name = os.path.dirname(os.path.abspath(__file__))
     path_DIDList = os.path.join(dir_name, DIDStatusCsv)
     path_DEXT = os.path.join(dir_name, PathToDextArxml)
     path_Connection = os.path.join(dir_name, pathToAssemblyConnectionDID)

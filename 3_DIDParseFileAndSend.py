@@ -5,8 +5,8 @@ from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 from openpyxl.formatting.rule import CellIsRule
 
-project='PR105'
-DIDStatusExcel = "DIDStatus_PR105.xlsx"
+project = None
+DIDStatusExcel = None
 
 def adjustWidth(ws):
     for col in ws.columns:
@@ -123,7 +123,8 @@ def parseAndSend(Pcan):
     print(f"{DIDStatusExcel} updated successfully")
 
 if __name__ == "__main__":
-    FileConfig=loadConfigFilePath()
+    dir_name = os.path.dirname(os.path.abspath(__file__))
+    FileConfig = loadConfigFilePath(dir_name)
     load_config(globals(), globals(), FileConfig)
 
     if(project == 'PR105'):
