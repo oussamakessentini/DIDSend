@@ -4,101 +4,127 @@ import os
 from UDS.utils import *
 
 DIDStatusCsv = None
-PathToDextArxml = None
+PathToDextSupplierArxml = None
+PathToDextAppliArxml = None
 pathToAssemblyConnectionDID = None
 
 def extractOsTaskWithIndex(file_path):
-    # use regex Read and Write function extract
-    enum_pattern_ReadWriteDID = re.compile(
-        r'<SHORT-NAME>DCM_DID_(\w{4})_([R|W]\w*)<\/SHORT-NAME>',
-        re.MULTILINE
-    )
-    with open(file_path, 'r') as file:
-        content = file.read()
-    
-    enums = {}
-    for match in enum_pattern_ReadWriteDID.finditer(content):
-        did_name = match.group(1)
-        FunctionName = match.group(2)
+    enums = None
+    # test if file present
+    if os.path.isfile(file_path):
+        # use regex Read and Write function extract
+        enum_pattern_ReadWriteDID = re.compile(
+            r'<SHORT-NAME>DCM_DID_(\w{4})_([R|W]\w*)<\/SHORT-NAME>',
+            re.MULTILINE
+        )
+        with open(file_path, 'r') as file:
+            content = file.read()
 
-        enums.setdefault(did_name, {'Read': False, 'Write': False})
-        # fill data with read and write access
-        if FunctionName == "Read":
-            enums[did_name]["Read"] = True
-        elif FunctionName == "Write":
-            enums[did_name]["Write"] = True
+        enums = {}
+        for match in enum_pattern_ReadWriteDID.finditer(content):
+            did_name = match.group(1)
+            FunctionName = match.group(2)
+
+            enums.setdefault(did_name, {'Read': False, 'Write': False})
+            # fill data with read and write access
+            if FunctionName == "Read":
+                enums[did_name]["Read"] = True
+            elif FunctionName == "Write":
+                enums[did_name]["Write"] = True
+            else:
+                continue
+    else:
+        print(f"extractOsTaskWithIndex: {file_path} is not present")
+
+    return enums
+
+def mergeSupplierAppli(Appli, Supplier):
+    enums = {}
+
+    for key, item in Appli.items():
+        enums[key] = item
+        if Supplier is None:
+            enums[key]["Responsibility"] = ""
+        elif key in Supplier:
+            enums[key]["Responsibility"] = "Supplier"
         else:
-            continue
+            enums[key]["Responsibility"] = "Appli"
 
     return enums
 
 def extract_did_data(file_path):
-    # parse ARXML File and extract data
-    tree = ET.parse(file_path)
-    tree, NULL = remove_namespace(tree)
-    root = tree.getroot()
-    
     did_data = []
-    
-    for did in root.iter("DIAGNOSTIC-DATA-IDENTIFIER"):
-        did_short_name = did.find("SHORT-NAME")
-        if did_short_name is not None:
-            did_name = did_short_name.text[-4:]
-            did_Size = did.find("DID-SIZE")
+    # test if file present
+    if os.path.isfile(file_path):
+        # parse ARXML File and extract data
+        tree = ET.parse(file_path)
+        tree, NULL = remove_namespace(tree)
+        root = tree.getroot()
+        
+        for did in root.iter("DIAGNOSTIC-DATA-IDENTIFIER"):
+            did_short_name = did.find("SHORT-NAME")
+            if did_short_name is not None:
+                did_name = did_short_name.text[-4:]
+                did_Size = did.find("DID-SIZE")
 
-            elements = []
-            for diag_param in did.iter("DIAGNOSTIC-PARAMETER"):  
-                element_short_name = find_recursive(diag_param, "SHORT-NAME")
-                bit_offset = find_recursive(diag_param, "BIT-OFFSET")
-                
-                if element_short_name is not None and bit_offset is not None:
-                    elements.append({
-                        "DID_VAR_NAME": element_short_name.text,
-                        "BIT_OFFSET": bit_offset.text
-                    })
-            did_data.append({
-                "DID_SHORT_NAME": did_name,
-                "DID_SIZE": did_Size.text,
-                "VARIABLES": elements
-            })
+                elements = []
+                for diag_param in did.iter("DIAGNOSTIC-PARAMETER"):  
+                    element_short_name = find_recursive(diag_param, "SHORT-NAME")
+                    bit_offset = find_recursive(diag_param, "BIT-OFFSET")
+                    
+                    if element_short_name is not None and bit_offset is not None:
+                        elements.append({
+                            "DID_VAR_NAME": element_short_name.text,
+                            "BIT_OFFSET": bit_offset.text
+                        })
+                did_data.append({
+                    "DID_SHORT_NAME": did_name,
+                    "DID_SIZE": did_Size.text,
+                    "VARIABLES": elements
+                })
+    else:
+        print(f"extract_did_data: {file_path} is not present")
     
     return did_data
 
 def extract_did_connection(file_path):
-    # parse ARXML File and extract data
-    tree = ET.parse(file_path)
-    tree, NULL = remove_namespace(tree)
-    root = tree.getroot()
-    
     connection_data = []
-    
-    for connection in root.iter("ASSEMBLY-SW-CONNECTOR"):
-        connection_short_name = connection.find("SHORT-NAME")
-        if connection_short_name is not None and "DCM_DID" in connection_short_name.text:
-            target_p_port_ref = find_recursive(connection, "TARGET-P-PORT-REF")
-            target_r_port_ref = find_recursive(connection, "TARGET-R-PORT-REF")
-            readLink = False
-            WriteLink = False
-            if "DCM_DID" in target_p_port_ref.text:
-                match = re.search(r'DCM_DID_(\w{4})_([\w_]+)', target_p_port_ref.text)
-                WriteLink = True
-            elif "DCM_DID" in target_r_port_ref.text:
-                match = re.search(r'DCM_DID_(\w{4})_([\w_]+)', target_r_port_ref.text)
-                readLink = True
-            else:
-                match = None
-            if match:
-                did_index = match.group(1)
-                did_name = match.group(2)
+    # test if file present
+    if os.path.isfile(file_path):
+        # parse ARXML File and extract data
+        tree = ET.parse(file_path)
+        tree, NULL = remove_namespace(tree)
+        root = tree.getroot()
+        
+        for connection in root.iter("ASSEMBLY-SW-CONNECTOR"):
+            connection_short_name = connection.find("SHORT-NAME")
+            if connection_short_name is not None and "DCM_DID" in connection_short_name.text:
+                target_p_port_ref = find_recursive(connection, "TARGET-P-PORT-REF")
+                target_r_port_ref = find_recursive(connection, "TARGET-R-PORT-REF")
+                readLink = False
+                WriteLink = False
+                if "DCM_DID" in target_p_port_ref.text:
+                    match = re.search(r'DCM_DID_(\w{4})_([\w_]+)', target_p_port_ref.text)
+                    WriteLink = True
+                elif "DCM_DID" in target_r_port_ref.text:
+                    match = re.search(r'DCM_DID_(\w{4})_([\w_]+)', target_r_port_ref.text)
+                    readLink = True
+                else:
+                    match = None
+                if match:
+                    did_index = match.group(1)
+                    did_name = match.group(2)
 
-            connection_data.append({
-                    "DID_INDEX": did_index,
-                    "DID_NAME": did_name,
-                    "TARGET-P-PORT-REF": target_p_port_ref.text if target_p_port_ref is not None else None,
-                    "TARGET-R-PORT-REF": target_r_port_ref.text if target_r_port_ref is not None else None,
-                    "WRITE-CONNECTION": WriteLink,
-                    "READ-CONNECTION": readLink
-                })
+                connection_data.append({
+                        "DID_INDEX": did_index,
+                        "DID_NAME": did_name,
+                        "TARGET-P-PORT-REF": target_p_port_ref.text if target_p_port_ref is not None else None,
+                        "TARGET-R-PORT-REF": target_r_port_ref.text if target_r_port_ref is not None else None,
+                        "WRITE-CONNECTION": WriteLink,
+                        "READ-CONNECTION": readLink
+                    })
+    else:
+        print(f"extract_did_connection: {file_path} is not present")
             
     return connection_data
 
@@ -110,7 +136,8 @@ def merge_did_and_assembly(DIDList, DID_data, DID_Connection):
             "DID_SIZE": did["DID_SIZE"],
             "DID_VARS": did["VARIABLES"],
             "Read": DIDList[did["DID_SHORT_NAME"]]["Read"],
-            "Write": DIDList[did["DID_SHORT_NAME"]]["Write"]
+            "Write": DIDList[did["DID_SHORT_NAME"]]["Write"],
+            "Responsibility": DIDList[did["DID_SHORT_NAME"]]["Responsibility"]
         }
         for variable in item["DID_VARS"]:
             for assembly in DID_Connection:
@@ -133,9 +160,9 @@ def merge_did_and_assembly(DIDList, DID_data, DID_Connection):
 def writeIntoCSV(data):
     try:
         with open(path_DIDList, "w") as f:
-            f.write("DID;DID_SIZE;Read;Write;Variable\n")
+            f.write("DID;DID_SIZE;Read;Write;Variable;Responsibility\n")
             for item in data:
-                f.write(f"{item.get('DID_INDEX', '')};{item.get('DID_SIZE', '')};{item.get('Read', '')};{item.get('Write', '')};{item.get('DID_VARS', '')}\n")
+                f.write(f"{item.get('DID_INDEX', '')};{item.get('DID_SIZE', '')};{item.get('Read', '')};{item.get('Write', '')};{item.get('DID_VARS', '')};{item.get('Responsibility', '')}\n")
     except Exception as e:
         print(str(e))
 
@@ -146,16 +173,19 @@ if __name__ == "__main__":
     load_config(globals(), globals(), FileConfig)
 
     path_DIDList = os.path.join(dir_name, DIDStatusCsv)
-    path_DEXT = os.path.join(dir_name, PathToDextArxml)
+    path_DEXTSupplier = os.path.join(dir_name, PathToDextSupplierArxml)
+    path_DEXTAppli = os.path.join(dir_name, PathToDextAppliArxml)
     path_Connection = os.path.join(dir_name, pathToAssemblyConnectionDID)
     # path_ConnectionAdded = os.path.join(dir_name, "../BmsGen2_Copy/Inputs/Arxml/BSW/DcmDID_Connectivity.arxml")
 
     # extract DID data Write and Read Access
-    DIDList = extractOsTaskWithIndex(path_DEXT)
+    DIDListAppli = extractOsTaskWithIndex(path_DEXTAppli)
+    DIDListSupplier = extractOsTaskWithIndex(path_DEXTSupplier)
+    DIDList = mergeSupplierAppli(Appli = DIDListAppli, Supplier = DIDListSupplier)
     # extract DID size and variable name
-    DID_data = extract_did_data(path_DEXT)
+    DID_data = extract_did_data(path_DEXTAppli)
     # extract connection established for Dcm
-    DID_Connection = extract_did_connection(path_Connection)
+    DID_Connection = []#extract_did_connection(path_Connection)
     # DID_Connection.extend(extract_did_connection(path_ConnectionAdded))
     # merge all Dictionnary into a csv file
     merged_info = merge_did_and_assembly(DIDList, DID_data, DID_Connection)
