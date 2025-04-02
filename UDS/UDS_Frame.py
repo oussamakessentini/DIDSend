@@ -3,6 +3,20 @@ from .CanApi4Wrapper import CanApi4Wrapper
 from .utils import *
 import pandas as pd
 import time
+import threading
+import queue
+
+class PeekableQueue(queue.Queue):
+    def __init__(self):
+        super().__init__()
+        self.peek_lock = threading.Lock()  # Lock for safe peeking
+
+    def peek(self):
+        """Safely peek at the first item without removing it."""
+        with self.peek_lock:  # Prevent other threads from peeking at the same time
+            if not self.empty():
+                return self.queue[0]  # Access the internal queue directly
+            return None  # Return None if the queue is empty
 
 class UDS_Frame():
 
@@ -21,6 +35,8 @@ class UDS_Frame():
         self.IsFiltered = IsFiltered
         self.PcanLib = PcanLib
         self.IsCanFD =IsCanFD
+        # Create a shared queue
+        self.q = PeekableQueue()
 
         # get the configuration from file
         if FileConfig != None:
@@ -289,7 +305,7 @@ class UDS_Frame():
         
         return returnValue
 
-    def startCanStoringTrace(self, df=None, InHex=True):
+    def startCanStoringTrace(self, df=None, InHex=True, decodeFrame=True):
         if not isinstance(df, pd.DataFrame):
             print("The object is NOT a pandas DataFrame.")
             return
@@ -299,100 +315,45 @@ class UDS_Frame():
                 "Type": "", \
                 "Size": 0, \
                 "Comments": ""}
-        dataResponse = []
-        sizeData = 0
-        frameReceived = False
-        responseCmdWait = 0
         try:
+            self.running = True  # Flag to control the worker loop
+            worker_thread = threading.Thread(target=self.__ReadMessagesThread, daemon=True)
+            worker_thread.start()
             while True:
-                msg = self.ReadMessages()
-                if (msg is not None):
-                    if (len(msg['data']) > 0):
-                        #if another frame is received different that the one waited
-                        if frameReceived == False and (row["id"] != "") and (msg['id'] != row["id"]) and (msg['data'][0] != 0x30):
-                            row["Type"] = "TX" if self.TxId == row["id"] else "RX" if self.RxId == row["id"] else ""
-                            row["id"] = row['id'] if InHex == False else format_hex(row['id'])
-                            row["Data"] = dataResponse if InHex == False else [format_hex(item) for item in dataResponse]
-                            row["Size"] = sizeData
-                            row["Comments"] = self.__decodeFrame(dataResponse, sizeData)
+                if decodeFrame:
+                    msg = self.__ReadUDSRequest(SendMultiFrameReaquest=False, isWorkingInThread=True)
+                    if msg['status'] == True:
+                        row["Type"] = "TX" if self.TxId == msg["id"] else "RX" if self.RxId == msg["id"] else ""
+                        row["id"] = msg['id'] if InHex == False else format_hex(msg['id'])
+                        row["Data"] = msg['data'] if InHex == False else [format_hex(item) for item in msg['data']]
+                        row["Size"] = msg['size']
+                        row["Comments"] = self.__decodeFrame(msg['data'], msg['size'])
+                        print(row)
+                        df.loc[len(df)] = row
+                    elif  msg['id'] != 0:
+                        row["Type"] = "TX" if self.TxId == msg["id"] else "RX" if self.RxId == msg["id"] else ""
+                        row["id"] = msg['id'] if InHex == False else format_hex(msg['id'])
+                        row["Data"] = msg['data'] if InHex == False else [format_hex(item) for item in msg['data']]
+                        row["Size"] = msg['size']
+                        row["Comments"] = "invalid Frame:" + self.__decodeFrame(msg['data'], msg['size'])
+                        print(row)
+                        df.loc[len(df)] = row
+                else:
+                    msg = self.ReadMessages()
+                    if (msg is not None):
+                        if (len(msg['data']) > 0):
+                            row["Type"] = "TX" if self.TxId == msg["id"] else "RX" if self.RxId == msg["id"] else ""
+                            row["id"] = msg['id'] if InHex == False else format_hex(msg['id'])
+                            row["Data"] = msg['data'] if InHex == False else [format_hex(item) for item in msg['data']]
+                            row["Size"] = len(msg['data'])
+                            row["Comments"] = ""
                             print(row)
                             df.loc[len(df)] = row
-                            dataResponse = []
-                            sizeData = 0
-                            frameReceived = True
-
-                        # prepare new frame data
-                        if frameReceived == True:
-                            row = { "id": msg['id'], \
-                                    "Data": [], \
-                                    "Type": "", \
-                                    "Size": 0, \
-                                    "Comments": ""}
-                            frameReceived = False
-
-                        if (msg['data'][0]&0xF0 == 0x0):
-                            row["id"] = msg['id']
-                            if ((msg['len']) <= 8):
-                                sizeData = msg['data'][0]
-                                dataResponse = msg['data'][1:1+sizeData]
-                                frameReceived = True
-                            else:
-                                sizeData = ((msg['data'][0] & 0xF) << 8) + msg['data'][1]
-                                dataResponse = msg['data'][2:2+sizeData]
-                                frameReceived = True
-                            frameReceived = True
-                        elif (msg['data'][1] == 0x7F):
-                            row["id"] = msg['id']
-                            sizeData = msg['data'][0]
-                            dataResponse = msg['data'][1:1+sizeData]
-                            frameReceived = True
-                            break
-                        elif (msg['data'][0]&0xF0 == 0x10):
-                            sizeData = ((msg['data'][0] & 0xF) << 8) + msg['data'][1]
-                            dataRemaining = sizeData
-                            dataResponse.extend(msg['data'][2:])
-                            dataRemaining -= len(dataResponse)
-                            row["id"] = msg['id']
-                            responseCmdWait = 1
-                        elif (row["id"] != "") and (msg['data'][0] == 0x30):
-                            # ask multi frame reception
-                            continue
-                        elif (msg['data'][0]&0xF0 == 0x20):
-                            if (msg['data'][0]&0xF == responseCmdWait):
-                                if dataRemaining < len(msg['data']):
-                                    dataResponse.extend(msg['data'][1:1+dataRemaining])
-                                    dataRemaining = 0
-                                else:
-                                    dataResponse.extend(msg['data'][1:])
-                                    dataRemaining -= len(msg['data'][1:])
-                                if dataRemaining == 0 and len(dataResponse) == sizeData:
-                                    frameReceived = True
-                                    responseCmdWait = 0
-                                responseCmdWait += 1
-                                responseCmdWait %= 16
-                        if frameReceived == True:
-                            row["Type"] = "TX" if self.TxId == row["id"] else "RX" if self.RxId == row["id"] else ""
-                            row["id"] = row['id'] if InHex == False else format_hex(row['id'])
-                            row["Data"] = dataResponse if InHex == False else [format_hex(item) for item in dataResponse]
-                            row["Size"] = sizeData
-                            row["Comments"] = self.__decodeFrame(dataResponse, sizeData)
-                            print(row)
-                            df.loc[len(df)] = row
-                            dataResponse = []
-                            sizeData = 0
         except Exception as e:
             print(f"Exception: {e}")
         finally:
-            if frameReceived == False and sizeData != 0:
-                row["Type"] = "TX" if self.TxId == row["id"] else "RX" if self.RxId == row["id"] else ""
-                row["id"] = row['id'] if InHex == False else format_hex(row['id'])
-                row["Data"] = dataResponse if InHex == False else [format_hex(item) for item in dataResponse]
-                row["Size"] = sizeData
-                row["Comments"] = self.__decodeFrame(dataResponse, sizeData)
-                print(row)
-                df.loc[len(df)] = row
-                dataResponse = []
-                sizeData = 0
+            self.running = False  # Flag to control the worker loop
+            worker_thread.join()
     
     def __WriteUDSRequest(self, data):
         max_Frame = 64 if self.IsCanFD else 8
@@ -435,14 +396,27 @@ class UDS_Frame():
                 # Wait for separation time (STmin)
                 time.sleep(st_min / 1000.0)
 
-    def __ReadUDSRequest(self, SendMultiFrameReaquest=True):
+    def __ReadMessagesThread(self):
+        """Worker function that runs in a separate thread"""
+        while self.running:
+            msg = self.ReadMessages()
+            if (msg is not None):
+                if (len(msg['data']) > 0):
+                    self.q.put(msg)
+
+    def __ReadUDSRequest(self, SendMultiFrameReaquest=True, isWorkingInThread=False):
         response = {"id": 0, "data": [], "status": False, "size": 0}
         frameReceived = False
         dataRemaining = 0
         responseCmdWait = 0
+        FrameConsumed = True
         start_time = time.time()
         while time.time() - start_time < self.timeout:
-            msg = self.ReadMessages()
+            if isWorkingInThread:
+                msg = self.q.peek()
+                FrameConsumed = True
+            else:
+                msg = self.ReadMessages()
             if (msg is not None):
                 if (len(msg['data']) > 0):
                     if (msg['data'][0]&0xF0 == 0x0):
@@ -476,12 +450,21 @@ class UDS_Frame():
                                 responseCmdWait = 0
                             responseCmdWait += 1
                             responseCmdWait %= 16
+                        else:
+                            FrameConsumed = False
+                            # counter of multi frame is not correct
+                            break
                     # ignore MultiFrameReaquest when it is not sended
-                    elif SendMultiFrameReaquest == False and msg['data'][0] != 0x30:
+                    elif msg['data'][0] == 0x30:
+                        # a multi frame is received
+                        pass
+                    else:
                         # unknown frame received
-                        response["id"] = msg['id']
-                        response["data"] = msg['data']
+                        FrameConsumed = False
                         break
+                    if (isWorkingInThread and FrameConsumed):
+                        self.q.get()
+                        self.q.task_done()
                     if (frameReceived):
                         response["status"] = True
                         break
