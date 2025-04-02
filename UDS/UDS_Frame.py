@@ -486,6 +486,45 @@ class UDS_Frame():
 
         return return_value
 
+    def RcRequest(self, message, InHex=True):
+        return_value = {"request" : message if InHex == False else [format_hex(item) for item in message], "response" : [],"status" : False}
+        if self.comOk == False:
+            print ("No Communication established")
+            exit(0)
+        try:
+            self.WriteMessages(self.TxId, message)
+
+            start_time = time.time()
+            while time.time() - start_time < self.timeout:
+                rc_msg = self.ReadMessages()
+                if (rc_msg is not None):
+                    if((rc_msg['id'] == self.RxId) and\
+                       (rc_msg['data'][1] == 0x71) and\
+                       (rc_msg['data'][3] == message[3]) and\
+                       (rc_msg['data'][4] == message[4])):
+                        # Check RC type request
+                        if(message[2] == 0x1):
+                            return "ROUTINE_STARTED"
+                        elif(message[2] == 0x2):
+                            return "ROUTINE_STOPPED"
+                        else:
+                            return self.__get_uds_rc_status_desc(rc_msg['data'][5])
+
+                    elif((rc_msg['id'] == self.RxId) and\
+                         (rc_msg['data'][1] == 0x7F) and\
+                         (rc_msg['data'][2] == 0x31)):
+                        return ('ResultRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
+                    else:
+                        return ('ResultRc Error : ', format_hex(rc_msg['data'][1]), format_hex(rc_msg['data'][2]), self.__get_uds_nrc_description(rc_msg['data'][3]))
+            if time.time() - start_time > self.timeout:
+                raise TimeoutError(f"Time out No Response")
+            
+        except Exception as e:
+            return_value["response"] = e
+            return_value["status"] = False
+
+        return return_value
+
     def ReadDID(self, DID, decode=None):
         """
         Read data from a specified DID using UDS ReadDataByIdentifier (0x22) with multi-frame support.
@@ -519,7 +558,6 @@ class UDS_Frame():
 
         except Exception as e:
             return [f"Read {DID}", e]
-        return 
 
     def WriteDID(self, DID, data):
         """
@@ -583,7 +621,6 @@ class UDS_Frame():
 
             # Message payload
             startRcMsgPL  = [0x31, 0x01, did_high, did_low]
-            resultRcMsgPL = [0x31, 0x03, did_high, did_low]
 
             # Construct the message payload
             if(data is None):
@@ -593,41 +630,9 @@ class UDS_Frame():
                     raise ValueError(f"Invalid data length: {len(data)}. Must be between 1 and 4095 bytes.")
                 message = [len(startRcMsgPL + data)] + startRcMsgPL + data
 
-            self.WriteMessages(self.TxId, message)
-            rc_start = True
-            
-            start_time = time.time()
-            while time.time() - start_time < self.timeout:
-                rc_msg = self.ReadMessages()
-                if (rc_msg is not None):
-                    # print(rc_msg)
-                    if((rc_msg['id'] == self.RxId) and\
-                       (rc_msg['data'][1] == 0x71) and\
-                       (rc_msg['data'][3] == did_high) and\
-                       (rc_msg['data'][4] == did_low)):
+            data = self.RcRequest(message)
+            return data
 
-                        if(rc_start == True):
-                            if(data is not None):
-                                if(rc_msg['data'][5] != data[0]):
-                                    print('Error StartRC : wrong received data')
-                                    break
-                            # Request routine control result
-                            message = [len(resultRcMsgPL)] + resultRcMsgPL
-
-                            self.WriteMessages(self.TxId, message)
-                            rc_start = False
-                        else:
-                            return self.__get_uds_rc_status_desc(rc_msg['data'][5])
-
-                    elif((rc_msg['id'] == self.RxId) and\
-                         (rc_msg['data'][1] == 0x7F) and\
-                         (rc_msg['data'][2] == 0x31)):
-                        return ('StartRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
-                    else:
-                        return ('StartRc Error : ', format_hex(rc_msg['data'][1]), format_hex(rc_msg['data'][2]), self.__get_uds_nrc_description(rc_msg['data'][3]))
-                else:
-                    time.sleep(0.1)
-            raise TimeoutError(f"Time out No Response")
         except Exception as e:
             return [f"Write {DID}", False, e]
 
@@ -659,29 +664,9 @@ class UDS_Frame():
             # Construct the message payload
             message = [len(stopRcMsgPL)] + stopRcMsgPL
 
-            self.WriteMessages(self.TxId, message)
-            
-            start_time = time.time()
-            while time.time() - start_time < self.timeout:
-                rc_msg = self.ReadMessages()
-                if (rc_msg is not None):
-                    # print(rc_msg)
-                    if((rc_msg['id'] == self.RxId) and\
-                       (rc_msg['data'][1] == 0x71) and\
-                       (rc_msg['data'][3] == did_high) and\
-                       (rc_msg['data'][4] == did_low)):
+            data = self.RcRequest(message)
+            return data
 
-                        return 'ROUTINE_STOPPED_OK'
-
-                    elif((rc_msg['id'] == self.RxId) and\
-                         (rc_msg['data'][1] == 0x7F) and\
-                         (rc_msg['data'][2] == 0x31)):
-                        return ('StopRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
-                    else:
-                        return ('StopRc Error : ', format_hex(rc_msg['data'][1]), format_hex(rc_msg['data'][2]), self.__get_uds_nrc_description(rc_msg['data'][3]))
-                else:
-                    time.sleep(0.1)
-            raise TimeoutError(f"Time out No Response")
         except Exception as e:
             return [f"Write {DID}", False, e]
 
@@ -713,28 +698,8 @@ class UDS_Frame():
             # Construct the message payload
             message = [len(resultRcMsgPL)] + resultRcMsgPL
 
-            self.WriteMessages(self.TxId, message)
-            rc_start = True
-            
-            start_time = time.time()
-            while time.time() - start_time < self.timeout:
-                rc_msg = self.ReadMessages()
-                if (rc_msg is not None):
-                    # print(rc_msg)
-                    if((rc_msg['id'] == self.RxId) and\
-                       (rc_msg['data'][1] == 0x71) and\
-                       (rc_msg['data'][3] == did_high) and\
-                       (rc_msg['data'][4] == did_low)):
-                        return self.__get_uds_rc_status_desc(rc_msg['data'][5])
-
-                    elif((rc_msg['id'] == self.RxId) and\
-                         (rc_msg['data'][1] == 0x7F) and\
-                         (rc_msg['data'][2] == 0x31)):
-                        return ('ResultRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
-                    else:
-                        return ('ResultRc Error : ', format_hex(rc_msg['data'][1]), format_hex(rc_msg['data'][2]), self.__get_uds_nrc_description(rc_msg['data'][3]))
-                else:
-                    time.sleep(0.1)
-            raise TimeoutError(f"Time out No Response")
+            data = self.RcRequest(message)
+            return data
+        
         except Exception as e:
             return [f"Write {DID}", False, e]
