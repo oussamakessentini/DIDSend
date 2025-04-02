@@ -108,7 +108,7 @@ if __name__ == "__main__":
         # print("FD01 " + str(Pcan.ReadDID("FD01")))
         print("FD02 " + str(Pcan.ReadDID("FD02")))
 
-        print(Pcan.WriteReadRequest([0x19, 0x02, 0xFF], True))
+        print(Pcan.WriteReadRequest([0x19, 0x02, 0xFF]))
         print("8282 " + str(Pcan.ReadDID("8282")))
         print(Pcan.WriteDID("F062", [3]))
         print(Pcan.WriteDID("826A", [2]))

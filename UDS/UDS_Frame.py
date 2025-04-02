@@ -471,7 +471,7 @@ class UDS_Frame():
                         break
         return response
 
-    def WriteReadRequest(self, data, InHex=False):
+    def WriteReadRequest(self, data, InHex=True):
         return_value = {"request" : data if InHex == False else [format_hex(item) for item in data], "response" : [],"status" : False}
         if self.comOk == False:
             print ("No Communication established")
