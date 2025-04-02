@@ -1,12 +1,13 @@
 project: PR128
 DIDStatusCsv: DIDStatus_PR128.csv
 DIDStatusExcel: DIDStatus_PR128.xlsx
-PathToDextArxml: ../BmsGen2/Inputs/DEXT/BMS_AW010700.arxml
-pathToAssemblyConnectionDID: ../BmsGen2/Inputs/DEXT/Dext_Connections.arxml
+PathToDextSupplierArxml: ../BmsGen2/Inputs/DEXT/E401800_V8_supplier.arxml
+PathToDextAppliArxml: ../BmsGen2/Inputs/DEXT/E401800_V8_noMappingSupplier.arxml
+pathToAssemblyConnectionDID: ../BmsGen2_Copy/Inputs/DEXT/Dext_Connections.arxml
 CanConfig:
   TxId: 0x18DADBF1
   RxId: 0x18DAF1DB
-  IsCanFD: False
+  IsCanFD: True
   IsExtended: True
   IsFiltered: True
   IsPadded: True
@@ -16,8 +17,8 @@ CanConfig:
   PCANBasicConfig:
     PcanHandle: PCAN_USBBUS1
     Bitrate: PCAN_BAUD_500K
-    BitrateFD: f_clock_mhz=20, nom_brp=5, nom_tseg1=2, nom_tseg2=1, nom_sjw=1, data_brp=2, data_tseg1=3, data_tseg2=1, data_sjw=1
+    BitrateFD: f_clock_mhz=20, nom_brp=1, nom_tseg1=31, nom_tseg2=8, nom_sjw=8, data_brp=1, data_tseg1=6, data_tseg2=3, data_sjw=3
   CanApi4Config:
     device: pcan_usb
     client_name: PythonClient
-    net_name: ch1_500kb
+    net_name: CANFD_ETS
