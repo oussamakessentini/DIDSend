@@ -1,5 +1,5 @@
 from .CanApi4 import *
-from .utils import *
+from .Utils import *
 
 class CanApi4Wrapper:
     def __init__(self, device=None, client_name=None, net_name=None, IsCanFD=None, \

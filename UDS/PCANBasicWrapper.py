@@ -1,5 +1,5 @@
 from .PCANBasic import *
-from .utils import *
+from .Utils import *
 import time
 
 class PCANBasicWrapper:
@@ -50,6 +50,8 @@ class PCANBasicWrapper:
         self.IsFiltered = IsFiltered
         # extended CAN
         self.IsExtended = IsExtended
+
+        self.m_DLLFound = False
 
         # get the configuration from file
         if FileConfig != None:

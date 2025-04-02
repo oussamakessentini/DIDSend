@@ -1,6 +1,6 @@
 from .PCANBasicWrapper import PCANBasicWrapper
 from .CanApi4Wrapper import CanApi4Wrapper
-from .utils import *
+from .Utils import *
 import pandas as pd
 import time
 import threading
@@ -34,9 +34,10 @@ class UDS_Frame():
         self.timeout = 2
         self.IsFiltered = IsFiltered
         self.PcanLib = PcanLib
-        self.IsCanFD =IsCanFD
+        self.IsCanFD = IsCanFD
         # Create a shared queue
         self.q = PeekableQueue()
+        self.m_DLLFound = ''
 
         # get the configuration from file
         if FileConfig != None:

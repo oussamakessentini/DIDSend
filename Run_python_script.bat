@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 :: set env val
-SET "PythonTool=%~dp0..\..\PR105\TBMU_MAIN\ToolFiles\utils\Python\run.bat"
+SET "PythonTool=%~dp0..\PR105\TBMU_MAIN\ToolFiles\utils\Python\run.bat"
 
 :: Initialize variables
 set "count=0"
