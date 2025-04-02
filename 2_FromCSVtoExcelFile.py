@@ -1,7 +1,7 @@
 import pandas as pd
 import csv
 import ast  # To safely convert string representation of list/dict
-from UDS.utils import *
+from UDS.Utils import *
 
 DIDStatusCsv = None
 DIDStatusExcel = None

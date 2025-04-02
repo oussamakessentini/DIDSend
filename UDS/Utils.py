@@ -2,6 +2,8 @@ import yaml
 import os
 from collections.abc import Mapping
 import re
+import threading
+import queue
 
 Global_config_file = "Config.yml"
 
@@ -160,3 +162,15 @@ def find_recursive(element, tag):
         if found is not None:
             return found
     return None
+
+class PeekableQueue(queue.Queue):
+    def __init__(self):
+        super().__init__()
+        self.peek_lock = threading.Lock()  # Lock for safe peeking
+
+    def peek(self):
+        """Safely peek at the first item without removing it."""
+        with self.peek_lock:  # Prevent other threads from peeking at the same time
+            if not self.empty():
+                return self.queue[0]  # Access the internal queue directly
+            return None  # Return None if the queue is empty

@@ -1,6 +1,6 @@
 import os
 from UDS.UDS_Frame import UDS_Frame 
-from UDS.utils import *
+from UDS.Utils import *
 import pandas as pd
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 import xml.etree.ElementTree as ET
 import re
 import os
-from UDS.utils import *
+from UDS.Utils import *
 
 DIDStatusCsv = None
 PathToDextSupplierArxml = None
