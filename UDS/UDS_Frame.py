@@ -394,109 +394,121 @@ class UDS_Frame():
                 dataResponse = []
                 sizeData = 0
     
+    def __WriteUDSRequest(self, data):
+        max_Frame = 64 if self.IsCanFD else 8
+        if len(data) < max_Frame:  # Single Frame
+            total_length = len(data)
+            if total_length < 8:
+                sf_message = [total_length] + data
+            else:
+                sf_message = [total_length>>8, total_length&0xFF] + data
+            self.WriteMessages(self.TxId, sf_message)
+        else:  # Multi-Frame Communication
+            total_length = len(data)
+            ff_payload = data[:max_Frame - 2]
+            first_frame = [0x10 | ((total_length >> 8) & 0x0F), total_length & 0xFF] + ff_payload
+            self.WriteMessages(self.TxId, first_frame)
+
+            # Wait for Flow Control (FC)
+            start_time = time.time()
+            while time.time() - start_time < self.timeout:
+                fc_message = self.ReadMessages()
+                if fc_message and fc_message['id'] == self.RxId and fc_message['data'][0] == 0x30:
+                    block_size = fc_message['data'][1]
+                    st_min = fc_message['data'][2]
+                    break
+                elif self.IsFiltered == True:
+                    time.sleep(0.1)
+            else:
+                raise RuntimeError("No Flow Control received.")
+
+            # Send Consecutive Frames
+            seq_number = 1
+            data_remaining = data[max_Frame - 2:]  # Remaining data after the First Frame
+            while data_remaining:
+                cf_payload = data_remaining[:max_Frame - 1]
+                cf_message = [0x20 | seq_number] + cf_payload
+                self.WriteMessages(self.TxId, cf_message)
+                data_remaining = data_remaining[max_Frame - 1:]
+                seq_number = (seq_number + 1) % 16  # Sequence number wraps around
+
+                # Wait for separation time (STmin)
+                time.sleep(st_min / 1000.0)
+
+    def __ReadUDSRequest(self, SendMultiFrameReaquest=True):
+        response = {"id": 0, "data": [], "status": False, "size": 0}
+        frameReceived = False
+        dataRemaining = 0
+        responseCmdWait = 0
+        start_time = time.time()
+        while time.time() - start_time < self.timeout:
+            msg = self.ReadMessages()
+            if (msg is not None):
+                if (len(msg['data']) > 0):
+                    if (msg['data'][0]&0xF0 == 0x0):
+                        response["id"] = msg['id']
+                        if ((msg['len']) <= 8):
+                            response["size"] = msg['data'][0]
+                            response["data"] = msg['data'][1:1+response["size"]]
+                        else:
+                            response["size"] = ((msg['data'][0] & 0xF) << 8) + msg['data'][1]
+                            response["data"] = msg['data'][2:2+response["size"]]
+                        frameReceived = True
+                    elif (msg['data'][0]&0xF0 == 0x10):
+                        response["id"] = msg['id']
+                        response["size"] = ((msg['data'][0] & 0xF) << 8) + msg['data'][1]
+                        dataRemaining = response["size"]
+                        response["data"].extend(msg['data'][2:])
+                        dataRemaining -= len(response["data"])
+                        responseCmdWait = 1
+                        if SendMultiFrameReaquest:
+                            self.WriteMessages(self.TxId, [0x30])
+                    elif (msg['data'][0]&0xF0 == 0x20) and (response["id"] == msg['id']):
+                        if (msg['data'][0]&0xF == responseCmdWait):
+                            if dataRemaining < len(msg['data']):
+                                response["data"].extend(msg['data'][1:1+dataRemaining])
+                                dataRemaining = 0
+                            else:
+                                response["data"].extend(msg['data'][1:])
+                                dataRemaining -= len(msg['data'][1:])
+                            if dataRemaining == 0 and len(response["data"]) == response["size"]:
+                                frameReceived = True
+                                responseCmdWait = 0
+                            responseCmdWait += 1
+                            responseCmdWait %= 16
+                    # ignore MultiFrameReaquest when it is not sended
+                    elif SendMultiFrameReaquest == False and msg['data'][0] != 0x30:
+                        # unknown frame received
+                        response["id"] = msg['id']
+                        response["data"] = msg['data']
+                        break
+                    if (frameReceived):
+                        response["status"] = True
+                        break
+        return response
+
     def WriteReadRequest(self, data, InHex=False):
         return_value = {"request" : data if InHex == False else [format_hex(item) for item in data], "response" : [],"status" : False}
         if self.comOk == False:
             print ("No Communication established")
             exit(0)
         try:
-            max_Frame = 64 if self.IsCanFD else 8
-            if len(data) < max_Frame:  # Single Frame
-                sf_message = [len(data)] + data
-                self.WriteMessages(self.TxId, sf_message)
-            else:  # Multi-Frame Communication
-                total_length = len(data)
-                ff_payload = data[:max_Frame - 2]
-                first_frame = [0x10 | ((total_length >> 8) & 0x0F), total_length & 0xFF] + ff_payload
-                self.WriteMessages(self.TxId, first_frame)
-
-                # Wait for Flow Control (FC)
-                start_time = time.time()
-                while time.time() - start_time < self.timeout:
-                    fc_message = self.ReadMessages()
-                    if fc_message and fc_message['id'] == self.RxId and fc_message['data'][0] == 0x30:
-                        block_size = fc_message['data'][1]
-                        st_min = fc_message['data'][2]
-                        break
-                    elif self.IsFiltered == True:
-                        time.sleep(0.1)
-                else:
-                    raise RuntimeError("No Flow Control received.")
-
-                # Send Consecutive Frames
-                seq_number = 1
-                data_remaining = data[max_Frame - 2:]  # Remaining data after the First Frame
-                while data_remaining:
-                    cf_payload = data_remaining[:max_Frame - 1]
-                    cf_message = [0x20 | seq_number] + cf_payload
-                    self.WriteMessages(self.TxId, cf_message)
-                    data_remaining = data_remaining[max_Frame - 1:]
-                    seq_number = (seq_number + 1) % 16  # Sequence number wraps around
-
-                    # Wait for separation time (STmin)
-                    time.sleep(st_min / 1000.0)
-
-            response = []
-            dataResponse = []
-            sizeData = 0
-            frameReceived = False
-            responseCmdWait = 0
+            self.__WriteUDSRequest(data)
             start_time = time.time()
             while time.time() - start_time < self.timeout:
-                msg = self.ReadMessages()
-                if (msg is not None) and (msg['id'] == self.RxId):
-                    if (len(msg['data']) > 0):
-                        if (msg['data'][1] == 0x7F) and (msg['data'][2] == data[0]):
-                            error_code = msg['data'][3]
-                            if error_code != 0x78:
-                                raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
-                        elif (msg['data'][0]&0xF0 == 0x10):
-                            sizeData = ((msg['data'][0] & 0xF) << 8) + msg['data'][1]
-                            if verifyFrame(msg['data'][2:], data, min(sizeData, len(data))):
-                                dataRemaining = sizeData
-                                dataResponse.extend(msg['data'][2:])
-                                dataRemaining -= len(dataResponse)
-                                responseCmdWait = 1
-                                sf_message = [0x30]
-                                self.WriteMessages(self.TxId, sf_message)
-                            else:
-                                sizeData = 0
-                        elif (msg['data'][0]&0xF0 == 0x0):
-                            if ((msg['len']) <= 8):
-                                sizeData = msg['data'][0]
-                                if verifyFrame(msg['data'][1:], data, min(sizeData, len(data))):
-                                    dataResponse = msg['data'][1:1+sizeData]
-                                    frameReceived = True
-                                else:
-                                    sizeData = 0
-                            else:
-                                sizeData = ((msg['data'][0] & 0xF) << 8) + msg['data'][1]
-                                if verifyFrame(msg['data'][2:], data, min(sizeData, len(data))):
-                                    dataResponse = msg['data'][2:2+sizeData]
-                                    frameReceived = True
-                                else:
-                                    sizeData = 0
-                        elif (msg['data'][0]&0xF0 == 0x20):
-                            if (msg['data'][0]&0xF == responseCmdWait):
-                                if dataRemaining < len(msg['data']):
-                                    dataResponse.extend(msg['data'][1:1+dataRemaining])
-                                    dataRemaining = 0
-                                else:
-                                    dataResponse.extend(msg['data'][1:])
-                                    dataRemaining -= len(msg['data'][1:])
-                                if dataRemaining == 0 and len(dataResponse) == sizeData:
-                                    frameReceived = True
-                                    responseCmdWait = 0
-                                responseCmdWait += 1
-                                responseCmdWait %= 16
-                        if (frameReceived):
-                            response = dataResponse if InHex == False else [format_hex(item) for item in dataResponse]
-                            return_value["response"] = response
-                            return_value["status"] = True
-                            break
-            if len(dataResponse) < sizeData:
-                raise RuntimeError(f"Data missing: not all data received only {len(dataResponse)} bytes is received expected {sizeData} bytes")
-            elif time.time() - start_time > self.timeout:
+                msg = self.__ReadUDSRequest()
+                if (msg['id'] == self.RxId):
+                    if (msg['data'][0] == 0x7F) and (msg['data'][1] == data[0]):
+                        error_code = msg['data'][2]
+                        if error_code != 0x78:
+                            raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
+                    elif verifyFrame(msg['data'], data, min(msg['size'], len(data))):
+                        if len(msg['data']) < msg['size']:
+                            raise RuntimeError(f"Data missing: not all data received only {len(msg['data'])} bytes is received expected {msg['size']} bytes")
+                        return_value["response"] = msg['data'] if InHex == False else [format_hex(item) for item in msg['data']]
+                        return_value["status"] = True
+                        break
+            if time.time() - start_time > self.timeout:
                 raise TimeoutError(f"Time out No Response")
         except Exception as e:
             return_value["response"] = e

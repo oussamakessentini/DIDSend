@@ -25,12 +25,6 @@ echo.
 echo Select a Python script to execute:
 for /l %%i in (1,1,%count%) do (
     set "filename=!file%%i!"
-
-    rem Check if the filename starts with a number followed by an underscore
-    for /f "tokens=1,* delims=_" %%a in ("!filename!") do (
-        if "%%a" NEQ "!filename!" set "filename=%%b"
-    )
-
     echo [%%i] !filename!
 )
 
