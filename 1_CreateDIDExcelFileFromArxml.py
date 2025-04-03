@@ -29,7 +29,9 @@ def extractDataFromArxml(file_path):
                 Read = ""
                 Write = ""
                 if did_size is not None:
-                    size = int(int(did_size)/8)
+                    # Add +7 to rounds up and get the right size (byte numbers)
+                    # Note : // operator is the floor division operator => rounds down to the nearest whole number
+                    size = (int(did_size) + 7) // 8
                 if did_ReadFunction is not None:
                     Read = did_ReadFunction
                 if did_WriteFunction is not None:
