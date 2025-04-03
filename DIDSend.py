@@ -45,7 +45,7 @@ if __name__ == "__main__":
         # Pcan.StartReset(2) # SW Reset + NvM record
         # Wait 5s at startup
         # time.sleep(7)
-        # print(Pcan.ReadDID("E323"))
+        print(Pcan.ReadDID("0101"))
         print(Pcan.StartRC('DDE1', [0x01]))
         print(Pcan.StartRC('DD3A'))
         print(Pcan.StopRC('DD3A'))

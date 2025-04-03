@@ -406,7 +406,7 @@ class UDS_Frame():
                 msg = self.ReadMessages()
             if (msg is not None):
                 if (len(msg['data']) > 0):
-                    if (msg['data'][0]&0xF0 == 0x0):
+                    if (msg['data'][0] & 0xF0 == 0x0):
                         response["id"] = msg['id']
                         if ((msg['len']) <= 8):
                             response["size"] = msg['data'][0]
@@ -415,7 +415,7 @@ class UDS_Frame():
                             response["size"] = ((msg['data'][0] & 0xF) << 8) + msg['data'][1]
                             response["data"] = msg['data'][2:2+response["size"]]
                         frameReceived = True
-                    elif (msg['data'][0]&0xF0 == 0x10):
+                    elif (msg['data'][0] & 0xF0 == 0x10):
                         response["id"] = msg['id']
                         response["size"] = ((msg['data'][0] & 0xF) << 8) + msg['data'][1]
                         dataRemaining = response["size"]
@@ -423,9 +423,9 @@ class UDS_Frame():
                         dataRemaining -= len(response["data"])
                         responseCmdWait = 1
                         if SendMultiFrameReaquest:
-                            self.WriteMessages(self.TxId, [0x30])
-                    elif (msg['data'][0]&0xF0 == 0x20) and (response["id"] == msg['id']):
-                        if (msg['data'][0]&0xF == responseCmdWait):
+                            self.WriteMessages(self.TxId, [0x30, 0x00, 0x00])
+                    elif (msg['data'][0] & 0xF0 == 0x20) and (response["id"] == msg['id']):
+                        if (msg['data'][0] & 0xF == responseCmdWait):
                             if dataRemaining < len(msg['data']):
                                 response["data"].extend(msg['data'][1:1+dataRemaining])
                                 dataRemaining = 0
@@ -473,7 +473,7 @@ class UDS_Frame():
                         if error_code != 0x78:
                             raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
                     elif verifyFrame(msg['data'], data, min(msg['size'], len(data))):
-                        if len(msg['data']) < msg['size']:
+                        if len(msg['data']) < msg['size']: 
                             raise RuntimeError(f"Data missing: not all data received only {len(msg['data'])} bytes is received expected {msg['size']} bytes")
                         return_value["response"] = msg['data'] if InHex == False else [format_hex(item) for item in msg['data']]
                         return_value["status"] = True

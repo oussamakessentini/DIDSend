@@ -10,8 +10,8 @@ CanConfig:
   IsFiltered: True
   IsPadded: False
   timeout: 3
-  # PcanLib: CanApi4Lib
-  PcanLib: PCANBasicLib
+  PcanLib: CanApi4Lib
+  # PcanLib: PCANBasicLib
   PCANBasicConfig:
     PcanHandle: PCAN_USBBUS1
     Bitrate: PCAN_BAUD_500K
@@ -19,4 +19,4 @@ CanConfig:
   CanApi4Config:
     device: pcan_usb
     client_name: PythonClient
-    net_name: ch1_500kb
+    net_name: Can_500k
