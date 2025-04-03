@@ -129,19 +129,13 @@ if __name__ == "__main__":
 
     if(project == 'PR105'):
         Pcan = UDS_Frame(FileConfig=FileConfig)
-
-        # print(Pcan.getFrameFromId(596))
+        # Activate extented session before executing Excel file
         Pcan.StartSession(3)
-        # Pcan.StartReset(2)
-        # Pcan.StartReset(3)
-        # print(Pcan.ReadDID("F41C"))
-        # print(Pcan.ReadDID("D863"))
-        # print(Pcan.ReadDID("0101"))
         parseAndSend(Pcan)
-        
-    else:
+    elif(project == 'PR128'):
         Pcan = UDS_Frame(FileConfig=FileConfig)
-
+        # Activate extented session before executing Excel file
         Pcan.StartSession(3)
-        # print(Pcan.ReadDID("8281"))
         parseAndSend(Pcan)
+    else:
+        print('Please add your project configuration')
