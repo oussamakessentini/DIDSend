@@ -4,6 +4,7 @@ from collections.abc import Mapping
 import re
 import threading
 import queue
+import xmltodict
 
 Global_config_file = "Config.yml"
 
@@ -163,6 +164,21 @@ def find_recursive(element, tag):
             return found
     return None
 
+def find_recursive_Value(element, tag, value):
+    """Recherche récursive du premier élément avec le tag et valeur donné."""
+    found = element.find(tag)
+    if found is not None and value in found.text:
+        value = element.find("VALUE")
+        if value is not None:
+            return value.text
+        else:
+            return None
+    for child in element:
+        found = find_recursive_Value(child, tag, value)
+        if found is not None:
+            return found
+    return None
+
 class PeekableQueue(queue.Queue):
     def __init__(self):
         super().__init__()
@@ -174,3 +190,7 @@ class PeekableQueue(queue.Queue):
             if not self.empty():
                 return self.queue[0]  # Access the internal queue directly
             return None  # Return None if the queue is empty
+
+def arxml_to_dict_xmltodict(file_path):
+    with open(file_path, "r", encoding="utf-8") as file:
+        return xmltodict.parse(file.read())

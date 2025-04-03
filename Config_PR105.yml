@@ -1,9 +1,7 @@
 project: PR105
-DIDStatusCsv: DIDStatus_PR105.csv
+DIDDataExcel: DIDData_PR105.xlsx
 DIDStatusExcel: DIDStatus_PR105.xlsx
-PathToDextSupplierArxml: ../PR105/TBMU_MAIN/InFiles/Diagnostic/did.arxml
-PathToDextAppliArxml: ../PR105/TBMU_MAIN/InFiles/Diagnostic/did.arxml
-pathToAssemblyConnectionDID: ../PR105/TBMU_MAIN/InFiles/Diagnostic/did.arxml
+PathToArxml: ../PR105/TBMU_MAIN/App/Tresos_TBMU_App/output/generated/output/ConfigFull.arxml
 CanConfig:
   TxId: 0x6B4
   RxId: 0x694
