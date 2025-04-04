@@ -6,7 +6,35 @@ import pandas as pd
 
 DIDDataExcel = None
 DIDStatusExcel = None
-PathToArxml = None
+PathToArxml  = None
+PathToArxml1 = None
+PathToArxml2 = None
+# PathToArxml3 = None
+PathToMergedArxml = None
+
+def merge_arxml(files, output_file):
+    if not files:
+        print("Error: No files provided to merge.")
+        return
+
+    # Parse the first file and get its root
+    tree = ET.parse(files[0])
+    root = tree.getroot()
+
+    # Loop through the rest of the files and merge them
+    for file in files[1:]:
+        tree_to_merge = ET.parse(file)
+        root_to_merge = tree_to_merge.getroot()
+
+        # Append each element from the new root to the main root
+        for element in root_to_merge:
+            root.append(element)
+
+    # Write the merged tree to a new file
+    if output_file:
+        tree.write(output_file, encoding='utf-8', xml_declaration=True)
+    else:
+        print("Output file is None")
 
 def extractDataFromArxml(file_path):
     did_data = []
@@ -118,14 +146,15 @@ def extractDataFromArxml(file_path):
     
     return did_data, rc_data
 
+
 def writeIntoExcel(did_data, rc_data, StatusPath, dataPath):
     # Write DID data into the Excel file
     did_read  = []
     did_write = []
     for row in did_data:
-        if (row['Read'] != ''):
+        if (row['Read'] != '') and (row['Size'] is not None):
             did_read.append({'DID': row['DID'], 'Resultat': '', 'Data': '', 'Error': '', 'Size': row['Size']})
-        if (row['Write'] != ''):
+        if (row['Write'] != '') and (row['Size'] is not None):
             dataToWrite = ";".join('0' for _ in range(int(row['Size'])))
             did_write.append({'DID': row['DID'], 'Status': '', 'Error': '', 'Data': dataToWrite, 'Size': row['Size']})
     df_read  = pd.DataFrame(did_read)
@@ -143,18 +172,73 @@ def writeIntoExcel(did_data, rc_data, StatusPath, dataPath):
             # Write RC data into the Excel file
             df_rc_data.to_excel(writer, sheet_name='RC List', index=False)
 
+
+def remove_duplicates(input_file, output_file):
+    # Check if the input file exists
+    if not os.path.isfile(input_file):
+        print(f"Error: The file '{input_file}' does not exist.")
+        return
+
+    # Check if the input file has the correct extension
+    if not input_file.lower().endswith(('.xlsx', '.xls')):
+        print(f"Error: The file '{input_file}' is not a valid Excel file.")
+        return
+
+    try:
+        # Read the Excel file
+        df = pd.read_excel(input_file)
+
+        # Remove duplicate rows
+        df_cleaned = df.drop_duplicates()
+
+        # Save the cleaned DataFrame back to Excel
+        df_cleaned.to_excel(output_file, index=False)
+        print(f"Cleaned file saved as '{output_file}'.")
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
 if __name__ == "__main__":
     # Replace local variable with the config 
     dir_name = os.path.dirname(os.path.abspath(__file__))
     FileConfig = loadConfigFilePath(dir_name)
     load_config(globals(), globals(), FileConfig)
 
-    path_DIDStatus = os.path.join(dir_name, DIDStatusExcel)
-    path_DIDData = os.path.join(dir_name, DIDDataExcel)
-    path_arxml = os.path.join(dir_name, PathToArxml)
+    # Initialize path for ARXML and lists
+    path_arxml = None
+    DIDList = []
+    RCList = []
+    file_list = []
 
-    # Extract DID\RC data :
-    DIDList, RCList = extractDataFromArxml(path_arxml)
+    path_DIDStatus = os.path.join(dir_name, DIDStatusExcel)
+    path_DIDData   = os.path.join(dir_name, DIDDataExcel)
+
+    if(PathToArxml is not None):
+        path_arxml = os.path.join(dir_name, PathToArxml)
+
+        # Extract DID\RC data :
+        DIDList, RCList = extractDataFromArxml(path_arxml)
+
+    elif(PathToArxml1 is not None) and \
+        (PathToArxml2 is not None) and \
+        (PathToMergedArxml is not None):
+
+        path_arxml1 = os.path.join(dir_name, PathToArxml1)
+        path_arxml2 = os.path.join(dir_name, PathToArxml2)
+        # path_arxml3 = os.path.join(dir_name, PathToArxml3)
+
+        file_list = [path_arxml1, path_arxml2]
+
+        # Merge ARXML files
+        merge_arxml(file_list, PathToMergedArxml)
+        # Get merged ARXML file path
+        path_merged_arxml = os.path.join(dir_name, PathToMergedArxml)
+
+        # Extract DID\RC data :
+        DIDList, RCList = extractDataFromArxml(path_merged_arxml)
+    else:
+        print('Error : Please review the project Config file fields')
 
     writeIntoExcel(DIDList, RCList, DIDStatusExcel, DIDDataExcel)
     
+    # remove_duplicates(DIDDataExcel, DIDDataExcel)
