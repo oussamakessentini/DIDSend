@@ -172,7 +172,11 @@ def find_recursive_Value(element, tag, value):
         if value is not None:
             return value.text
         else:
-            return None
+            value = element.find("VALUE-REF")
+            if value is not None:
+                return value.text
+            else:
+                return None
     for child in element:
         found = find_recursive_Value(child, tag, value)
         if found is not None:
