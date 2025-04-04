@@ -38,7 +38,7 @@ def extractDataFromArxml(file_path):
                         did_dataInfo = find_recursive(data_s, "SHORT-NAME")
                         # Check specific DID => DcmDspData
                         if did_dataInfo.text == did_dataRef:
-                            did_size = find_recursive_Value(data_s, "DEFINITION-REF", "DcmDspDataSize")
+                            did_size     = find_recursive_Value(data_s, "DEFINITION-REF", "DcmDspDataSize")
                             did_read_fct = find_recursive_Value(data_s, "DEFINITION-REF", "DcmDspDataReadFnc")
                             did_wead_fct = find_recursive_Value(data_s, "DEFINITION-REF", "DcmDspDataWriteFnc")
 
@@ -52,22 +52,35 @@ def extractDataFromArxml(file_path):
             
             # Retreive RC
             if def_Val is not None and def_Val.text.endswith("Dcm/DcmConfigSet/DcmDsp/DcmDspRoutine"):
-                rc_start_fct = find_recursive_Value(data, "DEFINITION-REF", "DcmDspStartRoutineFnc")
-                rc_stop_fct = find_recursive_Value(data, "DEFINITION-REF", "DcmDspStopRoutineFnc")
+                rc_start_fct  = find_recursive_Value(data, "DEFINITION-REF", "DcmDspStartRoutineFnc")
+                rc_stop_fct   = find_recursive_Value(data, "DEFINITION-REF", "DcmDspStopRoutineFnc")
                 rc_result_fct = find_recursive_Value(data, "DEFINITION-REF", "DcmDspRequestResultsRoutineFnc")
-                rc_id = find_recursive_Value(data, "DEFINITION-REF", "DcmDspRoutineIdentifier")
+                rc_id         = find_recursive_Value(data, "DEFINITION-REF", "DcmDspRoutineIdentifier")
+
                 # Convert and clean RC ID format
                 rc_id = str(hex(int(rc_id))).upper()[2:].zfill(4)
+
+                rc_start_dataIn_size   = ''
+                rc_start_dataOut_size  = ''
+                rc_stop_dataIn_size    = ''
+                rc_stop_dataOut_size   = ''
+                rc_result_dataIn_size  = ''
+                rc_result_dataOut_size = ''
+                
                 rc_info = find_recursive_Value(data, "DEFINITION-REF", "DcmDspRoutineInfoRef")
                 # Get RC Info definition from DcmDspRoutineInfoRef
-                rc_info = rc_info.split('/')[-1]
+                if rc_info is not None:
+                    rc_info = rc_info.split('/')[-1]
                 
                 # Retreive RC information
                 for data_s in root.iter("ECUC-CONTAINER-VALUE"):
                     def_Val = data_s.find("DEFINITION-REF")
-                    
+
+
+
                     if def_Val is not None and def_Val.text.endswith("Dcm/DcmConfigSet/DcmDsp/DcmDspRoutineInfo"):
                         rc_dataInfo = find_recursive(data_s, "SHORT-NAME")
+
                         # Check specific RC => DcmDspRoutineInfo
                         if rc_dataInfo.text == rc_info:
 
@@ -94,11 +107,12 @@ def extractDataFromArxml(file_path):
                             rc_result_dataOut_size = find_recursive_Value(data_s, "DEFINITION-REF", "DcmDspRoutineRequestResOutSignal/DcmDspRoutineSignalLength")
                             if rc_result_dataOut_size is not None:
                                 rc_result_dataOut_size = (int(rc_result_dataOut_size) + 7) // 8
-                            
-                            rc_data.append({"RC ID": rc_id, "Start RC": rc_start_fct, "Start DataIn": rc_start_dataIn_size, "Start DataOut": rc_start_dataOut_size, \
-                                                            "Stop RC": rc_stop_fct, "Stop DataIn": rc_stop_dataIn_size, "Stop DataOut": rc_stop_dataOut_size, \
-                                                            "Result RC": rc_result_fct, "Result DataIn": rc_result_dataIn_size, "Result DataOut": rc_result_dataOut_size})
                             break
+                            
+                rc_data.append({"RC ID": rc_id, "Start RC": rc_start_fct,   "Start DataIn": rc_start_dataIn_size,   "Start DataOut": rc_start_dataOut_size, \
+                                                "Stop RC": rc_stop_fct,     "Stop DataIn": rc_stop_dataIn_size,     "Stop DataOut": rc_stop_dataOut_size, \
+                                                "Result RC": rc_result_fct, "Result DataIn": rc_result_dataIn_size, "Result DataOut": rc_result_dataOut_size})
+
     else:
         print(f"extractDataFromArxml: {file_path} is not present")
     
