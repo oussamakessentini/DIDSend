@@ -21,71 +21,8 @@ def adjustWidth(ws):
         adjusted_width = (max_length + 2) if max_length < 100 else 100  # Ajouter un peu d'espace
         ws.column_dimensions[column].width = adjusted_width
 
-def Pcan_ReadDID(Pcan, did, size):
-    retVal = Pcan.ReadDID(did)
 
-    if is_hex(retVal[0]) == True:
-        data = ";".join(format_hex(int(x, 16)) for x in retVal)
-        if is_int(size):
-            if (len(retVal) == int(size)):
-                result = "OK"
-                Error = ""
-            else:
-                result = "NOK"
-                Error = f"Data received with incorrect size, data size received {len(retVal)}, data size expected {size}"
-        else:
-            result = "NOK"
-            Error = f"size is not an integer {size}"
-    else:
-        result = "NOK"
-        data = ""
-        Error = str(retVal[1])
-    return result, data, Error
-
-def Pcan_WriteDID(Pcan, did, dataraw=None):
-    # Clean raw data
-    data = [int(x, 16) for x in dataraw.split(";") if x]
-    # Process diagnostic request
-    retVal = Pcan.WriteDID(did, data)
-    # Process the result
-    if retVal[1] == True:
-        status = "OK"
-        Error = ""
-    else:
-        status = "NOK"
-        Error = str(retVal[2])
-    # Return a tuple (status, error)
-    return status, Error
-
-def Pcan_StartRC(Pcan, rcdid, dataraw=None):
-    # Clean raw data
-    data = [int(x, 16) for x in dataraw.split(";") if x]
-    # Process diagnostic request
-    retVal = Pcan.StartRC(rcdid, data)
-    # Process the result
-    if retVal == 'ROUTINE_STARTED':
-        status = "OK"
-        Error = ""
-    else:
-        status = "NOK"
-        Error = str(retVal)
-    # Return a tuple (status, error)
-    return status, Error
-
-def Pcan_ResultRC(Pcan, rcdid):
-    # Process diagnostic request
-    retVal = Pcan.ResultRC(rcdid)
-    # Process the result
-    if retVal == 'ROUTINE_FINISHED_OK' or retVal == 'ROUTINE_IN_PROCESS':
-        status = "OK"
-        Error = ""
-    else:
-        status = "NOK"
-        Error = str(retVal)
-    # Return a tuple (status, error)
-    return status, Error
-
-def parseAndSend(Pcan):
+def parseAndSend(Uds):
     # Load Excel sheets "DID Read", "DID Write", "RC Start", "RC Result" and avoid NaN in empty cells
     df_did_read  = pd.read_excel(DIDStatusExcel, sheet_name='DID Read',  dtype=str, na_values=[], keep_default_na=False)
     df_did_write = pd.read_excel(DIDStatusExcel, sheet_name='DID Write', dtype=str, na_values=[], keep_default_na=False)
@@ -94,8 +31,8 @@ def parseAndSend(Pcan):
 
     # Loop over the sheet "DID Read" line by line
     for index, line in df_did_read.iterrows():
-        # Call the function Pcan.ReadDID with the DID of the line
-        status, data, error = Pcan_ReadDID(Pcan, line['DID'], line['Size'])
+        # Call the function Uds.Pcan_ReadDID with the DID of the line
+        status, data, error = Uds.Pcan_ReadDID(line['DID'], line['Size'])
         
         # Update the line with the results
         df_did_read.at[index, 'Status'] = status
@@ -104,8 +41,8 @@ def parseAndSend(Pcan):
 
     # Loop over the sheet "DID Write" line by line
     for index, line in df_did_write.iterrows():
-        # Call the function Pcan.WriteDID with the DID of the line
-        status, error = Pcan_WriteDID(Pcan, line['DID'], line['Data'])
+        # Call the function Uds.Pcan_WriteDID with the DID of the line
+        status, error = Uds.Pcan_WriteDID(line['DID'], line['Data'])
         
         # Update the line with the results
         df_did_write.at[index, 'Status'] = status
@@ -113,16 +50,16 @@ def parseAndSend(Pcan):
 
     # Loop over the sheet "RC Start" line by line
     for index, line in df_rc_start.iterrows():
-        # Call the function Pcan.StartRC with the RC DID of the line
-        status, error = Pcan_StartRC(Pcan, line['RC ID'], line['Data In'])
+        # Call the function Uds.Pcan_StartRC with the RC DID of the line
+        status, error = Uds.Pcan_StartRC(line['RC ID'], line['Data In'])
         
         # Update the line with the results
         df_rc_start.at[index, 'Status'] = status
         df_rc_start.at[index, 'Error']  = error
     
     for index, line in df_rc_result.iterrows():
-        # Call the function Pcan.ResultRC with the RC DID of the line
-        status, error = Pcan_ResultRC(Pcan, line['RC ID'])
+        # Call the function Uds.Pcan_ResultRC with the RC DID of the line
+        status, error = Uds.Pcan_ResultRC(line['RC ID'])
         
         # Update the line with the results
         df_rc_result.at[index, 'Status'] = status
@@ -150,7 +87,7 @@ def parseAndSend(Pcan):
 
     # Set the colors for the painter format
     fill_green = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")  # Green
-    fill_red = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")    # Red
+    fill_red   = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")  # Red
 
     # Add conditional format rules for the column "Status"
     for ws in [ws_did_read, ws_did_write, ws_rc_start, ws_rc_result]:
@@ -174,21 +111,21 @@ if __name__ == "__main__":
     load_config(globals(), globals(), FileConfig)
 
     if(project == 'PR105'):
-        Pcan = UDS_Frame(FileConfig=FileConfig)
+        Uds = UDS_Frame(FileConfig=FileConfig)
         
         # Activate extented session before executing Excel file
-        Pcan.StartSession(3)
+        Uds.StartSession(3)
 
         # Execute all the diagnostic services
-        parseAndSend(Pcan)
+        parseAndSend(Uds)
 
     elif(project == 'PR128'):
-        Pcan = UDS_Frame(FileConfig=FileConfig)
+        Uds = UDS_Frame(FileConfig=FileConfig)
 
         # Activate extented session before executing Excel file
-        Pcan.StartSession(3)
+        Uds.StartSession(3)
 
         # Execute all the diagnostic services
-        parseAndSend(Pcan)
+        parseAndSend(Uds)
     else:
         print('Please add your project configuration')
