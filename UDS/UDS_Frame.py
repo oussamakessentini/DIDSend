@@ -499,26 +499,31 @@ class UDS_Frame():
                 rc_msg = self.ReadMessages()
                 if (rc_msg is not None):
                     if((rc_msg['id'] == self.RxId) and\
-                       (rc_msg['data'][1] == 0x71) and\
-                       (rc_msg['data'][3] == message[3]) and\
-                       (rc_msg['data'][4] == message[4])):
+                        (rc_msg['data'][1] == 0x71) and\
+                        (rc_msg['data'][3] == message[3]) and\
+                        (rc_msg['data'][4] == message[4])):
                         # Check RC type request
-                        if(message[2] == 0x1):
+                        if(message[2] == 0x1): # RC Start
                             return "ROUTINE_STARTED"
-                        elif(message[2] == 0x2):
+                        elif(message[2] == 0x2): # RC Stop
                             return "ROUTINE_STOPPED"
+                        elif(message[2] == 0x3): # RC Result
+                            if(message[0] < 6):
+                                return "ROUTINE_FINISHED_OK"
+                            else:
+                                return self.__get_uds_rc_status_desc(rc_msg['data'][5])
                         else:
-                            return self.__get_uds_rc_status_desc(rc_msg['data'][5])
+                            print(rc_msg['data']) # To debug
 
                     elif((rc_msg['id'] == self.RxId) and\
-                         (rc_msg['data'][1] == 0x7F) and\
-                         (rc_msg['data'][2] == 0x31)):
+                            (rc_msg['data'][1] == 0x7F) and\
+                            (rc_msg['data'][2] == 0x31)):
                         return ('ResultRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
                     else:
                         return ('ResultRc Error : ', format_hex(rc_msg['data'][1]), format_hex(rc_msg['data'][2]), self.__get_uds_nrc_description(rc_msg['data'][3]))
             if time.time() - start_time > self.timeout:
                 raise TimeoutError(f"Time out No Response")
-            
+
         except Exception as e:
             return_value["response"] = e
             return_value["status"] = False
@@ -623,7 +628,7 @@ class UDS_Frame():
             startRcMsgPL  = [0x31, 0x01, did_high, did_low]
 
             # Construct the message payload
-            if(data is None):
+            if(data is None or len(data) == 0):
                 message = [len(startRcMsgPL)] + startRcMsgPL
             else:
                 if len(data) == 0 or len(data) > 4095:

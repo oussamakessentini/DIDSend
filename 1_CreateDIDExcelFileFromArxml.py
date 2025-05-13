@@ -104,8 +104,6 @@ def extractDataFromArxml(file_path):
                 for data_s in root.iter("ECUC-CONTAINER-VALUE"):
                     def_Val = data_s.find("DEFINITION-REF")
 
-
-
                     if def_Val is not None and def_Val.text.endswith("Dcm/DcmConfigSet/DcmDsp/DcmDspRoutineInfo"):
                         rc_dataInfo = find_recursive(data_s, "SHORT-NAME")
 
@@ -140,10 +138,9 @@ def extractDataFromArxml(file_path):
                 rc_data.append({"RC ID": rc_id, "Start RC": rc_start_fct,   "Start DataIn": rc_start_dataIn_size,   "Start DataOut": rc_start_dataOut_size, \
                                                 "Stop RC": rc_stop_fct,     "Stop DataIn": rc_stop_dataIn_size,     "Stop DataOut": rc_stop_dataOut_size, \
                                                 "Result RC": rc_result_fct, "Result DataIn": rc_result_dataIn_size, "Result DataOut": rc_result_dataOut_size})
-
     else:
         print(f"extractDataFromArxml: {file_path} is not present")
-    
+
     return did_data, rc_data
 
 
@@ -151,26 +148,41 @@ def writeIntoExcel(did_data, rc_data, StatusPath, dataPath):
     # Write DID data into the Excel file
     did_read  = []
     did_write = []
-    for row in did_data:
-        if (row['Read'] != '') and (row['Size'] is not None):
-            did_read.append({'DID': row['DID'], 'Resultat': '', 'Data': '', 'Error': '', 'Size': row['Size']})
-        if (row['Write'] != '') and (row['Size'] is not None):
-            dataToWrite = ";".join('0' for _ in range(int(row['Size'])))
-            did_write.append({'DID': row['DID'], 'Status': '', 'Error': '', 'Data': dataToWrite, 'Size': row['Size']})
-    df_read  = pd.DataFrame(did_read)
-    df_write = pd.DataFrame(did_write)
+    rc_start  = []
+    rc_result = []
+
     df_did_data = pd.DataFrame(did_data)
     df_rc_data  = pd.DataFrame(rc_data)
-
-    with pd.ExcelWriter(StatusPath, engine='openpyxl', mode='w') as writer:
-            df_read.to_excel(writer, sheet_name='DID Read', index=False)
-            df_write.to_excel(writer, sheet_name='DID Write', index=False)
     
     with pd.ExcelWriter(dataPath, engine='openpyxl', mode='w') as writer:
-            # Write DID data into the Excel file
-            df_did_data.to_excel(writer, sheet_name='DID List', index=False)
-            # Write RC data into the Excel file
-            df_rc_data.to_excel(writer, sheet_name='RC List', index=False)
+        # Write DID data into the Excel file
+        df_did_data.to_excel(writer, sheet_name='DID List', index=False)
+        # Write RC data into the Excel file
+        df_rc_data.to_excel(writer, sheet_name='RC List', index=False)
+
+    for row in did_data:
+        if (row['Read'] != '' and row['Read'] is not None and row['Size'] is not None):
+            did_read.append({'DID': row['DID'], 'Status': '', 'Data': '', 'Error': '', 'Size': row['Size']})
+        if (row['Write'] != '' and row['Write'] is not None and row['Size'] is not None):
+            dataToWrite = ";".join('0' for _ in range(int(row['Size'])))
+            did_write.append({'DID': row['DID'], 'Status': '', 'Error': '', 'Data': dataToWrite, 'Size': row['Size']})
+
+    for row in rc_data:
+        if (row['Start RC'] != '' and row['Start RC'] is not None):
+            rc_start.append({'RC ID': row['RC ID'], 'Status': '', 'Data In': row['Start DataIn'], 'Error': ''})
+        if (row['Result RC'] != '' and row['Result RC'] is not None):
+            rc_result.append({'RC ID': row['RC ID'], 'Status': '', 'Data Out': row['Result DataOut'], 'Error': ''})
+    
+    df_did_read  = pd.DataFrame(did_read)
+    df_did_write = pd.DataFrame(did_write)
+    df_rc_start  = pd.DataFrame(rc_start)
+    df_rc_result = pd.DataFrame(rc_result)
+    
+    with pd.ExcelWriter(StatusPath, engine='openpyxl', mode='w') as writer:
+        df_did_read.to_excel(writer,  sheet_name='DID Read',  index=False)
+        df_did_write.to_excel(writer, sheet_name='DID Write', index=False)
+        df_rc_start.to_excel(writer,  sheet_name='RC Start',  index=False)
+        df_rc_result.to_excel(writer, sheet_name='RC Result', index=False)
 
 
 def remove_duplicates(input_file, output_file):
@@ -210,8 +222,8 @@ if __name__ == "__main__":
     RCList = []
     file_list = []
 
-    path_DIDStatus = os.path.join(dir_name, DIDStatusExcel)
-    path_DIDData   = os.path.join(dir_name, DIDDataExcel)
+    # path_DIDStatus = os.path.join(dir_name, DIDStatusExcel)
+    # path_DIDData   = os.path.join(dir_name, DIDDataExcel)
 
     if(PathToArxml is not None):
         path_arxml = os.path.join(dir_name, PathToArxml)
