@@ -8,20 +8,6 @@ from openpyxl.formatting.rule import CellIsRule
 project = None
 DIDStatusExcel = None
 
-def adjustWidth(ws):
-    for col in ws.columns:
-        max_length = 0
-        column = col[0].column_letter  # Récupérer la lettre de la colonne (A, B, C, ...)
-        for cell in col:
-            try:
-                if len(str(cell.value)) > max_length:
-                    max_length = len(cell.value)
-            except:
-                pass
-        adjusted_width = (max_length + 2) if max_length < 100 else 100  # Ajouter un peu d'espace
-        ws.column_dimensions[column].width = adjusted_width
-
-
 def parseAndSend(Uds):
     # Load Excel sheets "DID Read", "DID Write", "RC Start", "RC Result" and avoid NaN in empty cells
     df_did_read  = pd.read_excel(DIDStatusExcel, sheet_name='DID Read',  dtype=str, na_values=[], keep_default_na=False)
@@ -51,7 +37,7 @@ def parseAndSend(Uds):
     # Loop over the sheet "RC Start" line by line
     for index, line in df_rc_start.iterrows():
         # Call the function Uds.Pcan_StartRC with the RC DID of the line
-        status, error = Uds.Pcan_StartRC(line['RC ID'], line['Data In'])
+        status, data, error = Uds.Pcan_StartRC(line['RC ID'], line['Data In'])
         
         # Update the line with the results
         df_rc_start.at[index, 'Status'] = status
@@ -59,8 +45,8 @@ def parseAndSend(Uds):
     
     for index, line in df_rc_result.iterrows():
         # Call the function Uds.Pcan_ResultRC with the RC DID of the line
-        status, error = Uds.Pcan_ResultRC(line['RC ID'])
-        
+        status, data, error = Uds.Pcan_ResultRC(line['RC ID'])
+
         # Update the line with the results
         df_rc_result.at[index, 'Status'] = status
         df_rc_result.at[index, 'Error']  = error
@@ -72,35 +58,9 @@ def parseAndSend(Uds):
         df_rc_start.to_excel(writer,  sheet_name='RC Start',  index=False)
         df_rc_result.to_excel(writer, sheet_name='RC Result', index=False)
 
-    # Load Excel file with openpyxl to add painter format rules
-    wb = load_workbook(DIDStatusExcel)
-    ws_did_read  = wb['DID Read']
-    ws_did_write = wb['DID Write']
-    ws_rc_start  = wb['RC Start']
-    ws_rc_result = wb['RC Result']
-
-    # Adjust the width of columns to adapt with the content
-    adjustWidth(ws_did_read)
-    adjustWidth(ws_did_write)
-    adjustWidth(ws_rc_start)
-    adjustWidth(ws_rc_result)
-
-    # Set the colors for the painter format
-    fill_green = PatternFill(start_color="00FF00", end_color="00FF00", fill_type="solid")  # Green
-    fill_red   = PatternFill(start_color="FF0000", end_color="FF0000", fill_type="solid")  # Red
-
-    # Add conditional format rules for the column "Status"
-    for ws in [ws_did_read, ws_did_write, ws_rc_start, ws_rc_result]:
-        max_row = ws.max_row
-        cell_range = f"B2:B{max_row}"
-        # Rule 1: if the value is "OK" => green
-        ws.conditional_formatting.add(cell_range, CellIsRule(operator='equal', formula=['"OK"'], fill=fill_green))
-        # Rule 2: if the value is "NOK" => red
-        ws.conditional_formatting.add(cell_range, CellIsRule(operator='equal', formula=['"NOK"'], fill=fill_red))
-
-    # Save the Excel file with the rules and format painter
-    wb.save(DIDStatusExcel)
-
+    # Set the colors of the painter format with rules
+    applyPainterFormat(DIDStatusExcel, 'B')
+    
     print(f"{DIDStatusExcel} updated successfully")
 
 

@@ -502,18 +502,23 @@ class UDS_Frame():
                         (rc_msg['data'][1] == 0x71) and\
                         (rc_msg['data'][3] == message[3]) and\
                         (rc_msg['data'][4] == message[4])):
+
                         # Check RC type request
                         if(rc_msg['data'][2] == 0x1): # RC Start
                             return "ROUTINE_STARTED", rc_msg['data'], ''
                         elif(rc_msg['data'][2] == 0x2): # RC Stop
                             return "ROUTINE_STOPPED", rc_msg['data'], ''
                         elif(rc_msg['data'][2] == 0x3): # RC Result
-                            if(rc_msg['data'][5] == 0x2):
-                                return "ROUTINE_FINISHED_OK", rc_msg['data'], ''
+                            if(rc_msg['data'][0] >= 5):
+                                return self.__get_uds_rc_status_desc(rc_msg['data'][5]), rc_msg['data'], ''
+                            elif(rc_msg['data'][0] == 4):
+                                return 'ROUTINE_FINISHED_OK', rc_msg['data'], 'Remark : There is no output byte for the result status'
                             else:
-                                return self.__get_uds_rc_status_desc(rc_msg['data'][5])
+                                print(rc_msg['data']) # To debug
+                                return 'NOK', rc_msg['data'], 'ResultRc Error : Uncorrect size'
                         else:
                             print(rc_msg['data']) # To debug
+                            return 'NOK', rc_msg['data'], 'ResultRc Error : Undefined'
 
                     elif((rc_msg['id'] == self.RxId) and\
                             (rc_msg['data'][1] == 0x7F) and\
