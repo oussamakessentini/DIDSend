@@ -246,6 +246,8 @@ class UDS_Frame():
         return msg
 
     def StartSession(self, number):
+        status = 'NOK'
+        error = ''
         if self.comOk == False:
             print ("No Communication established")
             exit(0)
@@ -256,13 +258,23 @@ class UDS_Frame():
         msg = self.WriteReadRequest(data)
 
         if (msg["status"] == True):
-            print (f"Session {number} activated...")
-            return True
-        print(f"StartSession {number} : Time out No Response")
-        return False
+            if(number == 1):
+                print (f"Default session activated...")
+            elif(number == 2):
+                print (f"Programmation session activated...")
+            elif(number == 3):
+                print (f"Extended session activated...")
+            else:
+                print (f"Session number : {number} not identified")
+            status = 'OK'
+        else:
+            status = 'NOK'
+            error = str(msg["response"])
+        return status, error
 
     def StartReset(self, rstReq):
-        retState = False
+        status = 'NOK'
+        error = ''
         if self.comOk == False:
             print ("No Communication established")
             exit(0)
@@ -273,13 +285,12 @@ class UDS_Frame():
         msg = self.WriteReadRequest(data)
 
         if (msg["status"] == True):
-            print("StartReset : OK")
-            retState = True
+            status = 'OK'
         else:
-            print("StartReset : NOK, " + msg["response"])
-            retState = False
+            status = 'NOK'
+            error = str(msg["response"])
 
-        return retState
+        return status, error
 
     def __decodeFrame(self, data, size):
         returnValue = ""
@@ -466,20 +477,33 @@ class UDS_Frame():
             self.__WriteUDSRequest(data)
             start_time = time.time()
             while time.time() - start_time < self.timeout:
+
                 msg = self.__ReadUDSRequest()
+                # print([format_hex(item) for item in msg['data']])
+
                 if (msg['id'] == self.RxId):
+
                     if (msg['data'][0] == 0x7F) and (msg['data'][1] == data[0]):
                         error_code = msg['data'][2]
+
                         if error_code != 0x78:
                             raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
+                        
                     elif verifyFrame(msg['data'], data, min(msg['size'], len(data))):
+
                         if len(msg['data']) < msg['size']: 
                             raise RuntimeError(f"Data missing: not all data received only {len(msg['data'])} bytes is received expected {msg['size']} bytes")
+                        
                         return_value["response"] = msg['data'] if InHex == False else [format_hex(item) for item in msg['data']]
                         return_value["status"] = True
                         break
+
+                    else:
+                        print('WriteReadRequest Error : ', msg['data'][0], msg['data'][1])
+            
             if time.time() - start_time > self.timeout:
                 raise TimeoutError(f"Time out No Response")
+            
         except Exception as e:
             return_value["response"] = e
             return_value["status"] = False
@@ -712,6 +736,29 @@ class UDS_Frame():
         except Exception as e:
             return [f"Write {DID}", False, e]
 
+    def ClearDTC(self, data):
+
+        if self.comOk == False:
+            print ("No Communication established")
+            exit(0)
+        try:
+            if len(data) == 0 or len(data) > 3:
+                raise ValueError(f"Invalid data length: {len(data)}. Must be between 1 and 3 bytes.")
+
+            # Construct the first message payload
+            message = [0x14] + data
+
+            data = self.WriteReadRequest(message)
+
+            if data["status"] == True:
+                return [f"ClearDTC", True]
+            else:
+                return [f"ClearDTC", False, data["response"]]
+
+        except Exception as e:
+            return [f"ClearDTC Exception : ", False, e]
+
+
     def Pcan_ReadDID(self, did, size):
         retVal = self.ReadDID(did)
 
@@ -758,3 +805,19 @@ class UDS_Frame():
     def Pcan_ResultRC(self, rcdid):
         # Process diagnostic request
         return  self.ResultRC(rcdid)
+    
+    def Pcan_ClearDTC(self, dataraw=None):
+        # Clean raw data
+        data = [int(x, 16) for x in (dataraw or '').split(";") if x]
+
+        # Process diagnostic request
+        retVal = self.ClearDTC(data)
+        # Process the result
+        if retVal[1] == True:
+            status = "OK"
+            Error = ""
+        else:
+            status = "NOK"
+            Error = str(retVal[2])
+        # Return a tuple (status, error)
+        return status, Error

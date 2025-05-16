@@ -10,56 +10,159 @@ project = None
 DiagSeqExcel = None
 
 def processDiagSeqs(Uds):
+    loop_nb = 0
+    loop_start_idx = 0
+    max_loop = 1
+    status = ''
+    data   = ''
+    error  = ''
+
     # Read all sheets into a dictionary
     excel_data: dict[str, pd.DataFrame] = pd.read_excel(DiagSeqExcel, sheet_name=None, dtype=str, na_values=[], keep_default_na=False)
 
     # Iterate through all sheets
     for sheet_name, df in excel_data.items():
-        print(f"Sheet: {sheet_name}")
-        
-        # Loop over the sheet "DID Read" line by line
-        for index, line in df.iterrows():
-
-            if(line['Command'] == 'RDBI'):
-                status, data, error = Uds.Pcan_ReadDID(line['DID'], line['Size'])
-                df.at[index, 'Data'] = data
-
-            elif(line['Command'] == 'WDBI'):
-                status, error = Uds.Pcan_WriteDID(line['DID'], str(line['Data']))
-
-            elif(line['Command'] == 'RC_S'):
-                status, data, error = Uds.Pcan_StartRC(str(line['DID']))
-
-            elif(line['Command'] == 'RC_R'):
-                status, data, error = Uds.Pcan_ResultRC(str(line['DID']))
-
-            elif(line['Command'].lower() == 'wait'):
-                time.sleep(float(line['Data']))
-                status = 'OK'
-
-            else:
-                print('Command not reconized : ' + str(line)) # for debug
+        # Check Sheet name is starting with "DIAG_SEQ"
+        if(sheet_name.startswith("DIAG_SEQ")):
+            print(f"Processing {sheet_name}...")
             
-            # Update the line with the results
-            df.at[index, 'Status'] = status
-            df.at[index, 'Error']  = error
+            while loop_nb < max_loop:
+                # print(f"🔁 loop_nb = {loop_nb} max_loop = {max_loop}")
 
-            # Clear data
-            status = ''
-            data   = ''
-            error  = ''
+                # Loop over the sheet "DID Read" line by line from a specific index
+                for index, line in df.iloc[loop_start_idx:].iterrows():
 
-        # Save all modified sheets back to the same or a new Excel file
-        with pd.ExcelWriter(DiagSeqExcel, engine='openpyxl') as writer:
-            for sheet_name, df in excel_data.items():
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
+                    if(line['Command'] == 'LOOP_START'):
+                        max_loop = int(line['Data'])
+                        loop_start_idx = index + 1
 
-        # Set the colors of the painter format with rules
-        applyPainterFormat(DiagSeqExcel, 'E')
+                    elif(line['Command'] == 'LOOP_END'):
+                        loop_nb += 1
+                        if(loop_nb < max_loop):
+                            # break the loop for a new re-run
+                            break
+                        else:
+                            # End the loop and continue
+                            continue
+                    
+                    elif(line['Command'] == 'RDBI'):
+                        status, data, error = Uds.Pcan_ReadDID(line['DID'], line['Size'])
+                        df.at[index, 'Data'] = data
 
-        # print(f"{DiagSeqExcel} updated successfully")
-    
-    print("Processing diagnostic sequences OK")
+                    elif(line['Command'] == 'WDBI'):
+                        status, error = Uds.Pcan_WriteDID(line['DID'], str(line['Data']))
+
+                    elif(line['Command'] == 'RC_S'):
+                        status, data, error = Uds.Pcan_StartRC(str(line['DID']))
+
+                    elif(line['Command'] == 'RC_R'):
+                        status, data, error = Uds.Pcan_ResultRC(str(line['DID']))
+
+                    elif(line['Command'] == 'CLEAR_DTC'):
+                        status, error = Uds.Pcan_ClearDTC(str(line['Data']))
+
+                    elif(line['Command'].lower() == 'wait'):
+                        time.sleep(float(line['Data']))
+                        status = 'OK'
+
+                    else:
+                        print('Command not reconized : ' + str(line)) # for debug
+                    
+                    # Update the line with the results
+                    df.at[index, 'Status'] = status
+                    df.at[index, 'Error']  = error
+
+                    # Clear data
+                    status = ''
+                    data   = ''
+                    error  = ''
+
+            # Save all modified sheets back to the same or a new Excel file
+            with pd.ExcelWriter(DiagSeqExcel, engine='openpyxl') as writer:
+                for sheet_name, df in excel_data.items():
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+            # Set the colors of the painter format with rules
+            applyPainterFormat(DiagSeqExcel, 'E')
+
+            # print(f"{DiagSeqExcel} updated successfully")
+        else:
+            continue # Excel sheet name not correct
+    print("\nDiagnostic sequences processing => Done \n")
+
+
+def processProgSeqs(Uds):
+    status = ''
+    data   = ''
+    error  = ''
+    # Read all sheets into a dictionary
+    excel_data: dict[str, pd.DataFrame] = pd.read_excel(DiagSeqExcel, sheet_name=None, dtype=str, na_values=[], keep_default_na=False)
+
+    # Iterate through all sheets
+    for sheet_name, df in excel_data.items():
+        # Check Sheet name is starting with "PROG_SEQ"
+        if(sheet_name.startswith("PROG_SEQ")):
+            print(f"Processing {sheet_name}...")
+            # Loop over the sheet "DID Read" line by line
+            for index, line in df.iterrows():
+
+                if(line['Command'] == 'SW_RESET'):
+                    if(line['DID'] == '1101'):
+                        status, error = Uds.StartReset(0x1)
+                    elif(line['DID'] == '1102'):
+                        status, error = Uds.StartReset(0x2)
+                    elif(line['DID'] == '1103'):
+                        status, error = Uds.StartReset(0x3)
+                    else:
+                        print(f"{sheet_name} line : {index} => Reset command not reconized")
+
+                elif(line['Command'].endswith("SESSION")):
+                    if(line['DID'] == '1001'):
+                        status, error = Uds.StartSession(0x1)
+                    elif(line['DID'] == '1002'):
+                        status, error = Uds.StartSession(0x2)
+                    elif(line['DID'] == '1003'):
+                        status, error = Uds.StartSession(0x3)
+                    else:
+                        print(f"{sheet_name} line : {index} => Session command not reconized")
+                
+                elif(line['Command'] == 'WDBI'):
+                    status, error = Uds.Pcan_WriteDID(line['DID'], str(line['Data']))
+
+                elif(line['Command'] == 'RC_S'):
+                    status, data, error = Uds.Pcan_StartRC(str(line['DID']))
+
+                elif(line['Command'] == 'RC_R'):
+                    status, data, error = Uds.Pcan_ResultRC(str(line['DID']))
+
+                elif(line['Command'].lower() == 'wait'):
+                    time.sleep(float(line['Data']))
+                    status = 'OK'
+
+                else:
+                    print('Command not reconized : ' + str(line)) # for debug
+                
+                # Update the line with the results
+                df.at[index, 'Status'] = status
+                df.at[index, 'Error']  = error
+
+                # Clear data
+                status = ''
+                data   = ''
+                error  = ''
+
+            # Save all modified sheets back to the same or a new Excel file
+            with pd.ExcelWriter(DiagSeqExcel, engine='openpyxl') as writer:
+                for sheet_name, df in excel_data.items():
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+            # Set the colors of the painter format with rules
+            applyPainterFormat(DiagSeqExcel, 'E')
+
+            # print(f"{DiagSeqExcel} updated successfully")
+        else:
+            continue # Excel sheet name not correct
+    print("\nProgrammation sequences processing => Done \n")
 
 
 if __name__ == "__main__":
@@ -77,6 +180,9 @@ if __name__ == "__main__":
         # Execute all the diagnostic sequences
         processDiagSeqs(Uds)
 
+        # Execute all the programmation sequences
+        # processProgSeqs(Uds)
+
     elif(project == 'PR128'):
         Uds = UDS_Frame(FileConfig=FileConfig)
 
@@ -85,5 +191,8 @@ if __name__ == "__main__":
 
         # Execute all the diagnostic sequences
         # processDiagSeqs(Uds)
+
+        # Execute all the programmation sequences
+        # processProgSeqs(Uds)
     else:
         print('Please add your project configuration')
