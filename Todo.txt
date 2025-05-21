@@ -1,0 +1,12 @@
+--------------
+To Fix :
+--------------
+- Programming sequence
+
+
+--------------
+To implement :
+--------------
+- Add padding condig support
+- Secure Access
+- Tester present thread \ Queue

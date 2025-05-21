@@ -3,8 +3,15 @@ from .CanApi4Wrapper import CanApi4Wrapper
 from .Utils import *
 import pandas as pd
 import time
+import logging
+from enum import Enum, IntEnum
+from typing import Optional, Union, List, Tuple
 
-class UDS_Frame():
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('ULP_UDS_Programmer')
+
+class UDSInterface():
 
     # Shows if DLL was found
     m_DLLFound = False
@@ -17,7 +24,6 @@ class UDS_Frame():
         # Set Configuration
         self.TxId = TxID
         self.RxId = RxID
-        self.timeout = 2
         self.IsFiltered = IsFiltered
         self.PcanLib = PcanLib
         self.IsCanFD = IsCanFD
@@ -33,7 +39,7 @@ class UDS_Frame():
             if getattr(self, itemName) is None:
                 NoneData.append(itemName)
         if len(NoneData) != 0:
-            print (f"UDS_Frame: Please define these attributes in function call or in config file: {NoneData}")
+            print (f"UDSInterface: Please define these attributes in function call or in config file: {NoneData}")
             exit(0)
 
         if self.PcanLib == "PCANBasicLib":
@@ -221,146 +227,14 @@ class UDS_Frame():
         '''
         return self.m_objWrapper.write(id, data)
 
-    def getFrameFromId(self, canId):
-        """
-        Retrieve CAN message from CAN ID
-
-        Parameters:
-            canId (int): hex value without "0x" (e.g., "596").
-
-        Returns:
-            Can Message data object.
-        """
-        msg = 0
-        if (self.IsFiltered == True) and isBetween(canId, self.TxId, self.RxId):
-            print("Warning : this Can ID is filtered.")
-            return None
-        else:
-            startTime = time.time()
-            while ((time.time() - startTime) < self.timeout):
-                msg = self.ReadMessages()
-                if (msg is not None) and (msg['id'] == canId):
-                    break
-                elif self.IsFiltered == True:
-                    time.sleep(0.1)
-        return msg
-
-    def StartSession(self, number):
-        status = 'NOK'
-        error = ''
-        if self.comOk == False:
-            print ("No Communication established")
-            exit(0)
-        
-        data = []
-        data.append(0x10)
-        data.append(number)
-        msg = self.WriteReadRequest(data)
-
-        if (msg["status"] == True):
-            if(number == 1):
-                print (f"Default session activated...")
-            elif(number == 2):
-                print (f"Programmation session activated...")
-            elif(number == 3):
-                print (f"Extended session activated...")
-            else:
-                print (f"Session number : {number} not identified")
-            status = 'OK'
-        else:
-            status = 'NOK'
-            error = str(msg["response"])
-        return status, error
-
-    def StartReset(self, rstReq):
-        status = 'NOK'
-        error = ''
-        if self.comOk == False:
-            print ("No Communication established")
-            exit(0)
-        
-        data = []
-        data.append(0x11)
-        data.append(rstReq)
-        msg = self.WriteReadRequest(data)
-
-        if (msg["status"] == True):
-            status = 'OK'
-        else:
-            status = 'NOK'
-            error = str(msg["response"])
-
-        return status, error
-
-    def __decodeFrame(self, data, size):
-        returnValue = ""
-        if data[0] == 0x7F:
-            returnValue += f"Negative response: Error code 0x{data[2]:02X}: {self.__get_uds_nrc_description(data[2])} for {self.__get_UDS_type_frame(data[1], data, negativeRequest=True)}"
-        else:
-            returnValue += self.__get_UDS_type_frame(data[0], data)
-        if len(data) != size:
-            returnValue += f", Needed {size} Bytes, received only {len(data)} Bytes"
-        
-        return returnValue
-
-    def startCanStoringTrace(self, df=None, InHex=True, decodeFrame=True):
-        if not isinstance(df, pd.DataFrame):
-            print("The object is NOT a pandas DataFrame.")
-            return
-        
-        row = { "id": "", \
-                "Data": [], \
-                "Type": "", \
-                "Size": 0, \
-                "Comments": ""}
-        try:
-            self.running = True  # Flag to control the worker loop
-            worker_thread = threading.Thread(target=self.__ReadMessagesThread, daemon=True)
-            worker_thread.start()
-            while True:
-                if decodeFrame:
-                    msg = self.__ReadUDSRequest(SendMultiFrameReaquest=False, isWorkingInThread=True)
-                    if msg['status'] == True:
-                        row["Type"] = "TX" if self.TxId == msg["id"] else "RX" if self.RxId == msg["id"] else ""
-                        row["id"] = msg['id'] if InHex == False else format_hex(msg['id'])
-                        row["Data"] = msg['data'] if InHex == False else [format_hex(item) for item in msg['data']]
-                        row["Size"] = msg['size']
-                        row["Comments"] = self.__decodeFrame(msg['data'], msg['size'])
-                        print(row)
-                        df.loc[len(df)] = row
-                    elif  msg['id'] != 0:
-                        row["Type"] = "TX" if self.TxId == msg["id"] else "RX" if self.RxId == msg["id"] else ""
-                        row["id"] = msg['id'] if InHex == False else format_hex(msg['id'])
-                        row["Data"] = msg['data'] if InHex == False else [format_hex(item) for item in msg['data']]
-                        row["Size"] = msg['size']
-                        row["Comments"] = "invalid Frame:" + self.__decodeFrame(msg['data'], msg['size'])
-                        print(row)
-                        df.loc[len(df)] = row
-                else:
-                    msg = self.ReadMessages()
-                    if (msg is not None):
-                        if (len(msg['data']) > 0):
-                            row["Type"] = "TX" if self.TxId == msg["id"] else "RX" if self.RxId == msg["id"] else ""
-                            row["id"] = msg['id'] if InHex == False else format_hex(msg['id'])
-                            row["Data"] = msg['data'] if InHex == False else [format_hex(item) for item in msg['data']]
-                            row["Size"] = len(msg['data'])
-                            row["Comments"] = ""
-                            print(row)
-                            df.loc[len(df)] = row
-        except Exception as e:
-            print(f"Exception: {e}")
-        finally:
-            self.running = False  # Flag to control the worker loop
-            worker_thread.join()
-    
-    def __WriteUDSRequest(self, data):
+    def __WriteUDSRequest(self, data, timeout=2):
         max_Frame = 64 if self.IsCanFD else 8
         if len(data) < max_Frame:  # Single Frame
             total_length = len(data)
             if total_length < 8:
                 sf_message = [total_length] + data
             else:
-                sf_message = [total_length>>8, total_length&0xFF] + data
+                sf_message = [total_length >> 8, total_length & 0xFF] + data
             self.WriteMessages(self.TxId, sf_message)
         else:  # Multi-Frame Communication
             total_length = len(data)
@@ -370,7 +244,7 @@ class UDS_Frame():
 
             # Wait for Flow Control (FC)
             start_time = time.time()
-            while time.time() - start_time < self.timeout:
+            while time.time() - start_time < timeout:
                 fc_message = self.ReadMessages()
                 if fc_message and fc_message['id'] == self.RxId and fc_message['data'][0] == 0x30:
                     block_size = fc_message['data'][1]
@@ -402,14 +276,14 @@ class UDS_Frame():
                 if (len(msg['data']) > 0):
                     self.q.put(msg)
 
-    def __ReadUDSRequest(self, SendMultiFrameReaquest=True, isWorkingInThread=False):
+    def __ReadUDSRequest(self, SendMultiFrameReaquest=True, isWorkingInThread=False, timeout=2):
         response = {"id": 0, "data": [], "status": False, "size": 0}
         frameReceived = False
         dataRemaining = 0
         responseCmdWait = 0
         FrameConsumed = True
         start_time = time.time()
-        while time.time() - start_time < self.timeout:
+        while time.time() - start_time < timeout:
             if isWorkingInThread:
                 msg = self.q.peek()
                 FrameConsumed = True
@@ -452,12 +326,12 @@ class UDS_Frame():
                             FrameConsumed = False
                             # counter of multi frame is not correct
                             break
-                    # ignore MultiFrameReaquest when it is not sended
+                    # Ignore MultiFrameReaquest when it is not sended
                     elif msg['data'][0] == 0x30:
                         # a multi frame is received
                         pass
                     else:
-                        # unknown frame received
+                        # Unknown frame received
                         FrameConsumed = False
                         break
                     if (isWorkingInThread and FrameConsumed):
@@ -468,50 +342,55 @@ class UDS_Frame():
                         break
         return response
 
-    def WriteReadRequest(self, data, InHex=True):
-        return_value = {"request" : data if InHex == False else [format_hex(item) for item in data], "response" : [],"status" : False}
+    def WriteReadRequest(self, data, resp_req=True, timeout=2):
+        return_value = {"request" : [format_hex(item) for item in data], "response" : [],"status" : False}
         if self.comOk == False:
             print ("No Communication established")
             exit(0)
-        try:
-            self.__WriteUDSRequest(data)
-            start_time = time.time()
-            while time.time() - start_time < self.timeout:
+        # try:
+        self.__WriteUDSRequest(data, timeout)
 
-                msg = self.__ReadUDSRequest()
+        # Response not required
+        if not resp_req:
+            return None
+        
+        start_time = time.time()
+        while time.time() - start_time < timeout:
 
-                if (msg['id'] == self.RxId):
+            msg = self.__ReadUDSRequest()
+
+            if (msg['id'] == self.RxId):
+                
+                if (msg['data'][0] == 0x7F) and (msg['data'][1] == data[0]):
+                    error_code = msg['data'][2]
+
+                    if error_code != 0x78:
+                        raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
                     
-                    if (msg['data'][0] == 0x7F) and (msg['data'][1] == data[0]):
-                        error_code = msg['data'][2]
+                elif verifyFrame(msg['data'], data, min(msg['size'], len(data))):
 
-                        if error_code != 0x78:
-                            raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
-                        
-                    elif verifyFrame(msg['data'], data, min(msg['size'], len(data))):
+                    if len(msg['data']) < msg['size']: 
+                        raise RuntimeError(f"Missing Data : Not all the expected {msg['size']} bytes data are received only {len(msg['data'])} bytes")
+                    
+                    return_value["response"] = [format_hex(item) for item in msg['data']]
+                    return_value["status"] = True
+                    break
 
-                        if len(msg['data']) < msg['size']: 
-                            raise RuntimeError(f"Missing Data : Not all the expected {msg['size']} bytes data are received only {len(msg['data'])} bytes")
-                        
-                        return_value["response"] = msg['data'] if InHex == False else [format_hex(item) for item in msg['data']]
-                        return_value["status"] = True
-                        break
-
-                    else:
-                        print('WriteReadRequest Error : ', msg['data'][0], msg['data'][1])
+                else:
+                    print('WriteReadRequest Error : ', msg['data'][0], msg['data'][1])
+        
+        if time.time() - start_time > timeout:
+            raise TimeoutError(f"Time out No Response")
             
-            if time.time() - start_time > self.timeout:
-                raise TimeoutError(f"Time out No Response")
-            
-        except Exception as e:
-            return_value["response"] = e
-            return_value["status"] = False
-        # print(return_value)
+        # except Exception as e:
+        #     return_value["response"] = e
+        #     return_value["status"] = False
+        print(return_value)
         return return_value
 
-    def RcRequest(self, message, InHex=True):
+    def RcRequest(self, message, timeout=2):
         # Set the return structure values
-        return_value = {"request" : message if InHex == False else [format_hex(item) for item in message], "response" : [],"status" : False}
+        return_value = {"request" : [format_hex(item) for item in message], "response" : [],"status" : False}
         if self.comOk == False:
             print ("No Communication established")
             exit(0)
@@ -519,7 +398,7 @@ class UDS_Frame():
             self.WriteMessages(self.TxId, message)
 
             start_time = time.time()
-            while time.time() - start_time < self.timeout:
+            while time.time() - start_time < timeout:
                 rc_msg = self.ReadMessages()
 
                 if (rc_msg is not None):
@@ -530,34 +409,34 @@ class UDS_Frame():
 
                         # Check RC type request
                         if(rc_msg['data'][2] == 0x1): # RC Start
-                            return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                            return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                             return_value["status"] = True
                             break
 
                         elif(rc_msg['data'][2] == 0x2): # RC Stop
-                            return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                            return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                             return_value["status"] = True
                             break
 
                         elif(rc_msg['data'][2] == 0x3): # RC Result
                             if(rc_msg['data'][0] >= 5):
-                                return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                                return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                                 return_value["status"] = True
                                 break
 
                             elif(rc_msg['data'][0] == 4):
-                                return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                                return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                                 return_value["status"] = True
                                 break
 
                             else:
                                 # 'ResultRc Error : Uncorrect size'
-                                return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                                return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                                 return_value["status"] = False
                                 break
                         else:
                             # 'ResultRc Error : Undefined'
-                            return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                            return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                             return_value["status"] = False
                             break
 
@@ -565,23 +444,23 @@ class UDS_Frame():
                             (rc_msg['data'][1] == 0x7F) and\
                             (rc_msg['data'][2] == 0x31)):
                         # return 'NOK', rc_msg['data'], ('ResultRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
-                        return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                        return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                         return_value["status"] = False
                         break
                     else:
-                        return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                        return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                         return_value["status"] = False
                         break
                         # return 'NOK', rc_msg['data'], ('ResultRc Error : ', format_hex(rc_msg['data'][1]), format_hex(rc_msg['data'][2]), self.__get_uds_nrc_description(rc_msg['data'][3]))
                     
-            if time.time() - start_time > self.timeout:
+            if time.time() - start_time > timeout:
                 raise TimeoutError(f"Time out No Response")
 
         except Exception as e:
             return_value["response"] = e
             return_value["status"] = False
         
-        # print(return_value) # For debug
+        print(return_value) # For debug
         return return_value
 
     def ReadDID(self, DID, decode=None):
@@ -608,7 +487,7 @@ class UDS_Frame():
 
             message = [0x22, iDidHigh, iDidLow]
 
-            data = self.WriteReadRequest(message, InHex=True if decode is None else False)
+            data = self.WriteReadRequest(message)
 
             if data["status"] == True:
                 if decode is None:
@@ -668,17 +547,17 @@ class UDS_Frame():
         try:
             if len(data) == 0 or len(data) > 4095:
                 raise ValueError(f"Invalid data length: {len(data)}. Must be between 1 and 4095 bytes.")
-
+            
             resp = self.WriteReadRequest(data)
 
             if resp["status"] == True:
-                return [f"Write Data", True]
+                return [f'OK', '', 'Detail : ' + str(resp["response"])]
             else:
-                return [f"Write Data", False, resp["response"]]
+                return [f'NOK', '', 'WriteData Error : ' + str(self.__get_uds_nrc_description(resp["response"][3])) + ' => ' + str(resp["response"])]
 
         except Exception as e:
-            return [f"Write Data", False, e]
-        
+            return [f'NOK', '', e]
+
     def StartRC(self, DID, data=None):
         """
         Start routine controle using UDS (0x31).
@@ -801,7 +680,7 @@ class UDS_Frame():
                 else:
                     return [str(self.__get_uds_rc_status_desc(resp["response"][5])), '', '']
             else:
-                return [f'NOK', '', 'ResultRc Error : ' + str(self.__get_uds_nrc_description(resp["response"][3])) + ' => ' + str(resp["response"])]
+                return [f'NOK', '', 'ResultRc Error : ' + str(self.__get_uds_rc_status_desc(resp["response"][3])) + ' => ' + str(resp["response"])]
         
         except Exception as e:
             return [f'NOK', '', e]
@@ -828,6 +707,154 @@ class UDS_Frame():
         except Exception as e:
             return [f"ClearDTC Exception : ", False, e]
 
+    def SecurityAccess(self, level: int, key: Optional[bytes] = None) -> bool:
+        """Perform security access (request seed or send key)"""
+        try:
+            # Request seed (odd level)
+            if level % 2 == 1:
+                data = [UDSService.SECURITY_ACCESS, level]
+                status, response, error = self.WriteReadRequest(data)
+                print(str(response))
+                if len(response) < 3:
+                    raise ValueError("Invalid seed response length")
+                
+                seed = response[2:]  # Skip SID and subfunction
+                logger.info(f"Received seed: {seed.hex()}")
+                # Here you would typically compute the key from the seed
+                # For this example, we'll just return True
+                self.security_level = level
+                return True
+            
+            # Send key (even level)
+            elif key is not None:
+                data = [UDSService.SECURITY_ACCESS, level, key]
+                status, response, error = self.WriteReadRequest(data)
+                print(str(response))
+                self.security_level = level
+                logger.info("Security access granted")
+                return True
+            
+            else:
+                raise ValueError("Key required for even security access levels")
+        
+        except Exception as e:
+            logger.error(f"Security access failed: {str(e)}")
+            return False
+    
+    def RequestDownload(self, address: int, size: int) -> bool:
+        """Request download to specified memory address"""
+        try:
+            # Prepare address and size data
+            address_data = address.to_bytes(self.address_format, 'big')
+            size_data = size.to_bytes(self.address_format, 'big')
+            
+            # Format according to UDS standard
+            data = bytearray()
+            data.append(len(address_data))  # Address length
+            data.append(len(size_data))    # Size length
+            data.extend(address_data)
+            data.extend(size_data)
+            
+            message = [UDSService.REQUEST_DOWNLOAD]
+            message.append(data)
+
+            status, response, error = self.WriteReadRequest(message)
+            print(str(response))
+            if len(response) < 2 or response[0] != 0x74:
+                raise ValueError("Invalid request download response")
+            
+            # Parse max block length (if provided)
+            if len(response) > 2:
+                self.block_size = int.from_bytes(response[2:4], 'big')
+                logger.info(f"Server set max block size to {self.block_size}")
+            
+            return True
+        
+        except Exception as e:
+            logger.error(f"Request download failed: {str(e)}")
+            return False
+    
+    def TransferData(self, block_number: int, data: bytes) -> bool:
+        """Transfer data block"""
+        try:
+            block_counter = block_number % 0xFF  # Only 1 byte for block counter
+            request_data = bytearray([block_counter])
+            request_data.extend(data)
+
+            message = [UDSService.TRANSFER_DATA]
+            message.append(request_data)
+
+            status, response, error = self.WriteReadRequest(message)
+            print(str(response))
+            if len(response) < 2 or response[0] != 0x76:
+                raise ValueError("Invalid transfer data response")
+            
+            received_counter = response[1]
+            if received_counter != block_counter:
+                raise ValueError(f"Block counter mismatch: sent {block_counter}, received {received_counter}")
+            
+            return True
+        
+        except Exception as e:
+            logger.error(f"Transfer data failed: {str(e)}")
+            return False
+    
+    def RequestTransferExit(self) -> bool:
+        """Request transfer exit (finish download)"""
+        try:
+            status, response, error  = self.WriteReadRequest(UDSService.REQUEST_TRANSFER_EXIT)
+            print(str(response))
+            return len(response) >= 1 and response[0] == 0x77
+        except Exception as e:
+            logger.error(f"Request transfer exit failed: {str(e)}")
+            return False
+
+    def StartSession(self, number):
+        status = 'NOK'
+        error = ''
+        if self.comOk == False:
+            print ("No Communication established")
+            exit(0)
+        
+        data = []
+        data.append(0x10)
+        data.append(number)
+        msg = self.WriteReadRequest(data)
+
+        if (msg["status"] == True):
+            if(number == 1):
+                print (f"Default session activated...")
+            elif(number == 2):
+                print (f"Programmation session activated...")
+            elif(number == 3):
+                print (f"Extended session activated...")
+            else:
+                print (f"Session number : {number} not identified")
+            status = 'OK'
+        else:
+            status = 'NOK'
+            error = str(msg["response"])
+        return status, error
+
+    def StartReset(self, rstReq):
+        status = 'NOK'
+        error = ''
+        if self.comOk == False:
+            print ("No Communication established")
+            exit(0)
+        
+        data = []
+        data.append(0x11)
+        data.append(rstReq)
+        msg = self.WriteReadRequest(data)
+
+        if (msg["status"] == True):
+            status = 'OK'
+        else:
+            status = 'NOK'
+            error = str(msg["response"])
+
+        return status, error
 
     def Pcan_ReadDID(self, did, size):
         retVal = self.ReadDID(did)
@@ -871,21 +898,11 @@ class UDS_Frame():
         return status, Error
 
     def Pcan_WriteData(self, dataraw=None):
-
         # Clean raw data
         data = string_to_hexList(dataraw, ';')
 
         # Process diagnostic request
-        retVal = self.WriteData(data)
-        # Process the result
-        if retVal[1] == True:
-            status = "OK"
-            Error = ""
-        else:
-            status = "NOK"
-            Error = str(retVal[2])
-        # Return a tuple (status, error)
-        return status, Error
+        return self.WriteData(data)
 
     def Pcan_StartRC(self, rcdid, dataraw=None):
         # Clean raw data
@@ -917,3 +934,132 @@ class UDS_Frame():
             Error = str(retVal[2])
         # Return a tuple (status, error)
         return status, Error
+
+
+
+    def getFrameFromId(self, canId, timeout=2):
+        """
+        Retrieve CAN message from CAN ID
+
+        Parameters:
+            canId (int): hex value without "0x" (e.g., "596").
+
+        Returns:
+            Can Message data object.
+        """
+        msg = 0
+        if (self.IsFiltered == True) and isBetween(canId, self.TxId, self.RxId):
+            print("Warning : this Can ID is filtered.")
+            return None
+        else:
+            startTime = time.time()
+            while ((time.time() - startTime) < timeout):
+                msg = self.ReadMessages()
+                if (msg is not None) and (msg['id'] == canId):
+                    break
+                elif self.IsFiltered == True:
+                    time.sleep(0.1)
+        return msg
+
+    def __decodeFrame(self, data, size):
+        returnValue = ""
+        if data[0] == 0x7F:
+            returnValue += f"Negative response: Error code 0x{data[2]:02X}: {UDSNegativeResponseCode(data[2]).name} for {self.__get_UDS_type_frame(data[1], data, negativeRequest=True)}"
+        else:
+            returnValue += self.__get_UDS_type_frame(data[0], data)
+        if len(data) != size:
+            returnValue += f", Needed {size} Bytes, received only {len(data)} Bytes"
+        
+        return returnValue
+
+    def startCanStoringTrace(self, df=None, decodeFrame=True):
+        if not isinstance(df, pd.DataFrame):
+            print("The object is NOT a pandas DataFrame.")
+            return
+        
+        row = { "id": "", \
+                "Data": [], \
+                "Type": "", \
+                "Size": 0, \
+                "Comments": ""}
+        try:
+            self.running = True  # Flag to control the worker loop
+            worker_thread = threading.Thread(target=self.__ReadMessagesThread, daemon=True)
+            worker_thread.start()
+            while True:
+                if decodeFrame:
+                    msg = self.__ReadUDSRequest(SendMultiFrameReaquest=False, isWorkingInThread=True)
+                    if msg['status'] == True:
+                        row["Type"] = "TX" if self.TxId == msg["id"] else "RX" if self.RxId == msg["id"] else ""
+                        row["id"] = format_hex(msg['id'])
+                        row["Data"] = [format_hex(item) for item in msg['data']]
+                        row["Size"] = msg['size']
+                        row["Comments"] = self.__decodeFrame(msg['data'], msg['size'])
+                        print(row)
+                        df.loc[len(df)] = row
+                    elif  msg['id'] != 0:
+                        row["Type"] = "TX" if self.TxId == msg["id"] else "RX" if self.RxId == msg["id"] else ""
+                        row["id"] = format_hex(msg['id'])
+                        row["Data"] = [format_hex(item) for item in msg['data']]
+                        row["Size"] = msg['size']
+                        row["Comments"] = "invalid Frame:" + self.__decodeFrame(msg['data'], msg['size'])
+                        print(row)
+                        df.loc[len(df)] = row
+                else:
+                    msg = self.ReadMessages()
+                    if (msg is not None):
+                        if (len(msg['data']) > 0):
+                            row["Type"] = "TX" if self.TxId == msg["id"] else "RX" if self.RxId == msg["id"] else ""
+                            row["id"] = format_hex(msg['id'])
+                            row["Data"] = [format_hex(item) for item in msg['data']]
+                            row["Size"] = len(msg['data'])
+                            row["Comments"] = ""
+                            print(row)
+                            df.loc[len(df)] = row
+        except Exception as e:
+            print(f"Exception: {e}")
+        finally:
+            self.running = False  # Flag to control the worker loop
+            worker_thread.join()
+ 
+# -----------------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------------
+
+# class UDSNegativeResponseError(Exception):
+#     """Exception for UDS negative responses"""
+#     def __init__(self, service_id: int, error_code: int, error_name: str):
+#         self.service_id = service_id
+#         self.error_code = error_code
+#         self.error_name = error_name
+#         super().__init__(f"Negative response to service 0x{service_id:02X}: {error_name} (0x{error_code:02X})")
+
+class UDSService(IntEnum):
+    """UDS service identifiers"""
+    DIAGNOSTIC_SESSION_CONTROL = 0x10
+    ECU_RESET = 0x11
+    SECURITY_ACCESS = 0x27
+    COMMUNICATION_CONTROL = 0x28
+    TESTER_PRESENT = 0x3E
+    ACCESS_TIMING_PARAMETER = 0x83
+    SECURED_DATA_TRANSMISSION = 0x84
+    CONTROL_DTC_SETTING = 0x85
+    RESPONSE_ON_EVENT = 0x86
+    LINK_CONTROL = 0x87
+    READ_DATA_BY_IDENTIFIER = 0x22
+    READ_MEMORY_BY_ADDRESS = 0x23
+    READ_SCALING_DATA_BY_IDENTIFIER = 0x24
+    READ_DATA_BY_PERIODIC_IDENTIFIER = 0x2A
+    DYNAMICALLY_DEFINE_DATA_IDENTIFIER = 0x2C
+    WRITE_DATA_BY_IDENTIFIER = 0x2E
+    WRITE_MEMORY_BY_ADDRESS = 0x3D
+    CLEAR_DIAGNOSTIC_INFORMATION = 0x14
+    READ_DTC_INFORMATION = 0x19
+    INPUT_OUTPUT_CONTROL_BY_IDENTIFIER = 0x2F
+    ROUTINE_CONTROL = 0x31
+    REQUEST_DOWNLOAD = 0x34
+    REQUEST_UPLOAD = 0x35
+    TRANSFER_DATA = 0x36
+    REQUEST_TRANSFER_EXIT = 0x37
+    REQUEST_FILE_TRANSFER = 0x38
+

@@ -8,6 +8,9 @@ import xmltodict
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 from openpyxl.formatting.rule import CellIsRule
+import subprocess
+import logging
+from typing import List, Optional, Tuple, Union
 
 Global_config_file = "Config.yml"
 
@@ -257,3 +260,76 @@ def applyPainterFormat(excel_file, column):
 
     # Save the Excel file with the rules and format painter
     wb.save(excel_file)
+
+# ----------------------------------------    
+# ULP (Motorola S-record) functions
+# ----------------------------------------
+def run_srec_cat(
+    srec_cat_path: str,
+    input_files: List[Tuple[str, str]],  # [(filename, format), ...]
+    output_file: str,
+    output_format: str,
+    output_options: Optional[List[str]] = None,
+    global_options: Optional[List[str]] = None
+) -> bool:
+    """
+    Runs srec_cat.exe with full support for chaining multiple inputs, formats, and advanced options.
+
+    Args:
+        srec_cat_path (str): Path to srec_cat.exe.
+        input_files (List[Tuple[str, str]]): List of input files with formats (e.g., [('input.bin', 'Binary')]).
+        output_file (str): Path to the output file.
+        output_format (str): Output format (e.g., 'Intel', 'Srec', 'Binary').
+        output_options (List[str], optional): Additional options for output file (e.g., address range, offset).
+        global_options (List[str], optional): Additional global options (e.g., --fill, --output-block-size).
+
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    if not os.path.isfile(srec_cat_path):
+        logging.error(f"srec_cat.exe not found: {srec_cat_path}")
+        return False
+
+    for file_path, _ in input_files:
+        if not os.path.isfile(file_path):
+            logging.error(f"Input file not found: {file_path}")
+            return False
+
+    command = [srec_cat_path]
+
+    # Add input files and their formats
+    for file_path, fmt in input_files:
+        command.extend([file_path, f"-{fmt}"])
+
+    # Add global options if provided
+    if global_options:
+        command.extend(global_options)
+
+    # Add output file and format
+    command.extend(['-o', output_file, f'-{output_format}'])
+
+    # Add additional output options if provided
+    if output_options:
+        command.extend(output_options)
+
+    # Execute the command
+    try:
+        result = subprocess.run(
+            command,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        logging.info("srec_cat executed successfully.")
+        return True
+    except subprocess.CalledProcessError as e:
+        logging.error("srec_cat execution failed.")
+        logging.error(f"Command: {' '.join(command)}")
+        logging.error(f"Return Code: {e.returncode}")
+        logging.error(f"Stdout: {e.stdout}")
+        logging.error(f"Stderr: {e.stderr}")
+        return False
+    except Exception as ex:
+        logging.exception(f"Unexpected error while running srec_cat: {ex}")
+        return False

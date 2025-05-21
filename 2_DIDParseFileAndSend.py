@@ -1,4 +1,4 @@
-from UDS.UDS_Frame import UDS_Frame
+from UDS.UDS_Frame import *
 import pandas as pd
 from UDS.Utils import *
 from openpyxl import load_workbook
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     load_config(globals(), globals(), FileConfig)
 
     if(project == 'PR105'):
-        Uds = UDS_Frame(FileConfig=FileConfig)
+        Uds = UDSInterface(FileConfig=FileConfig)
         
         # Activate extented session before executing Excel file
         Uds.StartSession(3)
@@ -80,7 +80,7 @@ if __name__ == "__main__":
         parseAndSend(Uds)
 
     elif(project == 'PR128'):
-        Uds = UDS_Frame(FileConfig=FileConfig)
+        Uds = UDSInterface(FileConfig=FileConfig)
 
         # Activate extented session before executing Excel file
         Uds.StartSession(3)
