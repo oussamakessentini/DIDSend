@@ -479,10 +479,9 @@ class UDS_Frame():
             while time.time() - start_time < self.timeout:
 
                 msg = self.__ReadUDSRequest()
-                # print([format_hex(item) for item in msg['data']])
 
                 if (msg['id'] == self.RxId):
-
+                    
                     if (msg['data'][0] == 0x7F) and (msg['data'][1] == data[0]):
                         error_code = msg['data'][2]
 
@@ -492,7 +491,7 @@ class UDS_Frame():
                     elif verifyFrame(msg['data'], data, min(msg['size'], len(data))):
 
                         if len(msg['data']) < msg['size']: 
-                            raise RuntimeError(f"Data missing: not all data received only {len(msg['data'])} bytes is received expected {msg['size']} bytes")
+                            raise RuntimeError(f"Missing Data : Not all the expected {msg['size']} bytes data are received only {len(msg['data'])} bytes")
                         
                         return_value["response"] = msg['data'] if InHex == False else [format_hex(item) for item in msg['data']]
                         return_value["status"] = True
@@ -507,10 +506,11 @@ class UDS_Frame():
         except Exception as e:
             return_value["response"] = e
             return_value["status"] = False
-
+        # print(return_value)
         return return_value
 
     def RcRequest(self, message, InHex=True):
+        # Set the return structure values
         return_value = {"request" : message if InHex == False else [format_hex(item) for item in message], "response" : [],"status" : False}
         if self.comOk == False:
             print ("No Communication established")
@@ -521,6 +521,7 @@ class UDS_Frame():
             start_time = time.time()
             while time.time() - start_time < self.timeout:
                 rc_msg = self.ReadMessages()
+
                 if (rc_msg is not None):
                     if((rc_msg['id'] == self.RxId) and\
                         (rc_msg['data'][1] == 0x71) and\
@@ -529,35 +530,58 @@ class UDS_Frame():
 
                         # Check RC type request
                         if(rc_msg['data'][2] == 0x1): # RC Start
-                            return "ROUTINE_STARTED", rc_msg['data'], ''
+                            return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                            return_value["status"] = True
+                            break
+
                         elif(rc_msg['data'][2] == 0x2): # RC Stop
-                            return "ROUTINE_STOPPED", rc_msg['data'], ''
+                            return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                            return_value["status"] = True
+                            break
+
                         elif(rc_msg['data'][2] == 0x3): # RC Result
                             if(rc_msg['data'][0] >= 5):
-                                return self.__get_uds_rc_status_desc(rc_msg['data'][5]), rc_msg['data'], ''
+                                return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                                return_value["status"] = True
+                                break
+
                             elif(rc_msg['data'][0] == 4):
-                                return 'ROUTINE_FINISHED_OK', rc_msg['data'], 'Remark : There is no output byte for the result status'
+                                return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                                return_value["status"] = True
+                                break
+
                             else:
-                                print(rc_msg['data']) # To debug
-                                return 'NOK', rc_msg['data'], 'ResultRc Error : Uncorrect size'
+                                # 'ResultRc Error : Uncorrect size'
+                                return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                                return_value["status"] = False
+                                break
                         else:
-                            print(rc_msg['data']) # To debug
-                            return 'NOK', rc_msg['data'], 'ResultRc Error : Undefined'
+                            # 'ResultRc Error : Undefined'
+                            return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                            return_value["status"] = False
+                            break
 
                     elif((rc_msg['id'] == self.RxId) and\
                             (rc_msg['data'][1] == 0x7F) and\
                             (rc_msg['data'][2] == 0x31)):
-                        return 'NOK', rc_msg['data'], ('ResultRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
+                        # return 'NOK', rc_msg['data'], ('ResultRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
+                        return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                        return_value["status"] = False
+                        break
                     else:
-                        return 'NOK', rc_msg['data'], ('ResultRc Error : ', format_hex(rc_msg['data'][1]), format_hex(rc_msg['data'][2]), self.__get_uds_nrc_description(rc_msg['data'][3]))
-            
+                        return_value["response"] = rc_msg['data'] if InHex == False else [format_hex(item) for item in rc_msg['data']]
+                        return_value["status"] = False
+                        break
+                        # return 'NOK', rc_msg['data'], ('ResultRc Error : ', format_hex(rc_msg['data'][1]), format_hex(rc_msg['data'][2]), self.__get_uds_nrc_description(rc_msg['data'][3]))
+                    
             if time.time() - start_time > self.timeout:
                 raise TimeoutError(f"Time out No Response")
 
         except Exception as e:
             return_value["response"] = e
             return_value["status"] = False
-
+        
+        # print(return_value) # For debug
         return return_value
 
     def ReadDID(self, DID, decode=None):
@@ -581,8 +605,11 @@ class UDS_Frame():
             iDid = int(DID,16)
             iDidHigh = (iDid & 0xFF00) >> 8
             iDidLow = iDid & 0xFF
+
             message = [0x22, iDidHigh, iDidLow]
+
             data = self.WriteReadRequest(message, InHex=True if decode is None else False)
+
             if data["status"] == True:
                 if decode is None:
                     return data["response"][3:]
@@ -622,7 +649,9 @@ class UDS_Frame():
 
             # Construct the first message payload
             message = [0x2E, did_high, did_low] + data
+
             data = self.WriteReadRequest(message)
+
             if data["status"] == True:
                 return [f"Write {DID}", True]
             else:
@@ -631,6 +660,25 @@ class UDS_Frame():
         except Exception as e:
             return [f"Write {DID}", False, e]
 
+    def WriteData(self, data):
+
+        if self.comOk == False:
+            print ("No Communication established")
+            exit(0)
+        try:
+            if len(data) == 0 or len(data) > 4095:
+                raise ValueError(f"Invalid data length: {len(data)}. Must be between 1 and 4095 bytes.")
+
+            resp = self.WriteReadRequest(data)
+
+            if resp["status"] == True:
+                return [f"Write Data", True]
+            else:
+                return [f"Write Data", False, resp["response"]]
+
+        except Exception as e:
+            return [f"Write Data", False, e]
+        
     def StartRC(self, DID, data=None):
         """
         Start routine controle using UDS (0x31).
@@ -663,12 +711,21 @@ class UDS_Frame():
             else:
                 if len(data) == 0 or len(data) > 4095:
                     raise ValueError(f"Invalid data length: {len(data)}. Must be between 1 and 4095 bytes.")
-                message = [len(startRcMsgPL + data)] + startRcMsgPL + data
+                else:
+                    message = [len(startRcMsgPL + data)] + startRcMsgPL + data
 
-            return self.RcRequest(message)
+            resp = self.RcRequest(message)
+            
+            if resp["status"] == True:
+                if(resp["response"][0] == '0x04'):
+                    return [f'OK', '', 'Remark : No output byte']
+                else:
+                    return [f'OK', '', 'Output data : ' + str(resp["response"][5:])]
+            else:
+                return [f'NOK', '', 'ResultRc Error : ' + str(self.__get_uds_nrc_description(resp["response"][3])) + ' => ' + str(resp["response"])]
 
         except Exception as e:
-            return [f"Write {DID}", False, e]
+            return [f'NOK', '', e]
 
     def StopRC(self, DID):
         """
@@ -698,10 +755,15 @@ class UDS_Frame():
             # Construct the message payload
             message = [len(stopRcMsgPL)] + stopRcMsgPL
 
-            return self.RcRequest(message)
-
+            resp = self.RcRequest(message)
+            
+            if resp["status"] == True:
+                return [f'OK', '', str(resp["response"])]
+            else:
+                return [f'NOK', '', 'ResultRc Error : ' + str(self.__get_uds_nrc_description(resp["response"][3])) + ' => ' + str(resp["response"])]
+        
         except Exception as e:
-            return [f"Write {DID}", False, e]
+            return [f'NOK', '', e]
 
     def ResultRC(self, DID):
         """
@@ -731,10 +793,18 @@ class UDS_Frame():
             # Construct the message payload
             message = [len(resultRcMsgPL)] + resultRcMsgPL
 
-            return self.RcRequest(message)
+            resp = self.RcRequest(message)
+            
+            if resp["status"] == True:
+                if(resp["response"][0] == 4):
+                    return [f'OK', '', 'Remark : No output byte']
+                else:
+                    return [str(self.__get_uds_rc_status_desc(resp["response"][5])), '', '']
+            else:
+                return [f'NOK', '', 'ResultRc Error : ' + str(self.__get_uds_nrc_description(resp["response"][3])) + ' => ' + str(resp["response"])]
         
         except Exception as e:
-            return [f"Write {DID}", False, e]
+            return [f'NOK', '', e]
 
     def ClearDTC(self, data):
 
@@ -764,16 +834,21 @@ class UDS_Frame():
 
         if is_hex(retVal[0]) == True:
             data = ";".join(format_hex(int(x, 16)) for x in retVal or [])
-            if is_int(size):
-                if (len(retVal) == int(size)):
-                    result = "OK"
-                    Error = ""
+
+            if((size is not None) and (size != '')):
+                if is_int(size):
+                    if (len(retVal) == int(size)):
+                        result = "OK"
+                        Error = ""
+                    else:
+                        result = "NOK"
+                        Error = f"Data received with incorrect size, data size received {len(retVal)}, data size expected {size}"
                 else:
                     result = "NOK"
-                    Error = f"Data received with incorrect size, data size received {len(retVal)}, data size expected {size}"
+                    Error = f"Size is not an integer {size}"
             else:
-                result = "NOK"
-                Error = f"size is not an integer {size}"
+                result = "OK"
+                Error = f"Remark : Size check not performed => No Size value defined"
         else:
             result = "NOK"
             data = ""
@@ -782,7 +857,7 @@ class UDS_Frame():
 
     def Pcan_WriteDID(self, did, dataraw=None):
         # Clean raw data
-        data = [int(x, 16) for x in (dataraw or '').split(";") if x]
+        data = string_to_hexList(dataraw, ';')
         # Process diagnostic request
         retVal = self.WriteDID(did, data)
         # Process the result
@@ -795,12 +870,33 @@ class UDS_Frame():
         # Return a tuple (status, error)
         return status, Error
 
+    def Pcan_WriteData(self, dataraw=None):
+
+        # Clean raw data
+        data = string_to_hexList(dataraw, ';')
+
+        # Process diagnostic request
+        retVal = self.WriteData(data)
+        # Process the result
+        if retVal[1] == True:
+            status = "OK"
+            Error = ""
+        else:
+            status = "NOK"
+            Error = str(retVal[2])
+        # Return a tuple (status, error)
+        return status, Error
+
     def Pcan_StartRC(self, rcdid, dataraw=None):
         # Clean raw data
-        data = [int(x, 16) for x in (dataraw or '').split(";") if x]
+        data = string_to_hexList(dataraw, ';')
+
         # Process diagnostic request
-        # Return a tuple (status, error)
         return self.StartRC(rcdid, data)
+
+    def Pcan_StopRC(self, rcdid):
+        # Process diagnostic request
+        return self.StopRC(rcdid)
 
     def Pcan_ResultRC(self, rcdid):
         # Process diagnostic request
@@ -808,7 +904,7 @@ class UDS_Frame():
     
     def Pcan_ClearDTC(self, dataraw=None):
         # Clean raw data
-        data = [int(x, 16) for x in (dataraw or '').split(";") if x]
+        data = string_to_hexList(dataraw, ';')
 
         # Process diagnostic request
         retVal = self.ClearDTC(data)

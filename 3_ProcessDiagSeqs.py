@@ -40,6 +40,7 @@ def processDiagSeqs(Uds):
                         loop_nb += 1
                         if(loop_nb < max_loop):
                             # break the loop for a new re-run
+                            # print(loop_nb) # For debug
                             break
                         else:
                             # End the loop and continue
@@ -52,10 +53,13 @@ def processDiagSeqs(Uds):
                     elif(line['Command'] == 'WDBI'):
                         status, error = Uds.Pcan_WriteDID(line['DID'], str(line['Data']))
 
-                    elif(line['Command'] == 'RC_S'):
-                        status, data, error = Uds.Pcan_StartRC(str(line['DID']))
+                    elif(line['Command'] == 'RC_START'):
+                        status, data, error = Uds.Pcan_StartRC(str(line['DID']), str(line['Data']))
 
-                    elif(line['Command'] == 'RC_R'):
+                    elif(line['Command'] == 'RC_STOP'):
+                        status, data, error = Uds.Pcan_StopRC(str(line['DID']))
+
+                    elif(line['Command'] == 'RC_RESULT'):
                         status, data, error = Uds.Pcan_ResultRC(str(line['DID']))
 
                     elif(line['Command'] == 'CLEAR_DTC'):
@@ -66,7 +70,8 @@ def processDiagSeqs(Uds):
                         status = 'OK'
 
                     else:
-                        print('Command not reconized : ' + str(line)) # for debug
+                        status = 'NOK'
+                        error = 'Command not reconized : ' + str(line['Command'])
                     
                     # Update the line with the results
                     df.at[index, 'Status'] = status
@@ -76,6 +81,10 @@ def processDiagSeqs(Uds):
                     status = ''
                     data   = ''
                     error  = ''
+
+                    # Detect latest command in the Excel sheet
+                    if(index >= df.index.max()):
+                        loop_nb += 1
 
             # Save all modified sheets back to the same or a new Excel file
             with pd.ExcelWriter(DiagSeqExcel, engine='openpyxl') as writer:
@@ -125,15 +134,25 @@ def processProgSeqs(Uds):
                         status, error = Uds.StartSession(0x3)
                     else:
                         print(f"{sheet_name} line : {index} => Session command not reconized")
+
+                elif(line['Command'] == 'RDBI'):
+                    status, data, error = Uds.Pcan_ReadDID(line['DID'], line['Size'])
+                    df.at[index, 'Data'] = data
                 
                 elif(line['Command'] == 'WDBI'):
                     status, error = Uds.Pcan_WriteDID(line['DID'], str(line['Data']))
 
-                elif(line['Command'] == 'RC_S'):
-                    status, data, error = Uds.Pcan_StartRC(str(line['DID']))
+                elif(line['Command'] == 'RC_START'):
+                    status, data, error = Uds.Pcan_StartRC(str(line['DID']), str(line['Data']))
 
-                elif(line['Command'] == 'RC_R'):
+                elif(line['Command'] == 'RC_RESULT'):
                     status, data, error = Uds.Pcan_ResultRC(str(line['DID']))
+                
+                elif((line['Command'] == 'REQUEST_DOWNLOAD') or
+                     (line['Command'] == 'SECURE_ACCESS') or
+                     (line['Command'] == 'TESTER_PRESENT') or
+                     (line['Command'] == 'TRANSFERT_DATA')):
+                    status, error = Uds.Pcan_WriteData(str(line['Data']))
 
                 elif(line['Command'].lower() == 'wait'):
                     time.sleep(float(line['Data']))
@@ -141,7 +160,7 @@ def processProgSeqs(Uds):
 
                 else:
                     print('Command not reconized : ' + str(line)) # for debug
-                
+
                 # Update the line with the results
                 df.at[index, 'Status'] = status
                 df.at[index, 'Error']  = error
@@ -181,7 +200,7 @@ if __name__ == "__main__":
         processDiagSeqs(Uds)
 
         # Execute all the programmation sequences
-        # processProgSeqs(Uds)
+        processProgSeqs(Uds)
 
     elif(project == 'PR128'):
         Uds = UDS_Frame(FileConfig=FileConfig)

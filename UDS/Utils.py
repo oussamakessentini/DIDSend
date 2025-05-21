@@ -54,6 +54,13 @@ def get_dlc_for_data_length(data_length):
 
     return -1  # If the length is out of range
 
+def string_to_hexList(strData, symbol=''):
+    data = []
+    if strData:
+        for group in strData.split(symbol):
+            if group:
+                data.extend([int(x, 16) for x in group.split() if x])
+    return data
 
 def load_config(obj_dest, globalVal, config_file, Encode=False):
     """Load configuration from a YAML file."""
