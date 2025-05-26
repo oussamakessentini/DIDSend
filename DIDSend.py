@@ -1,6 +1,6 @@
 import time
 import os
-from UDS.UDS_Frame import * 
+from UDS.UDSInterface import * 
 from UDS.Utils import *
 
 project = None

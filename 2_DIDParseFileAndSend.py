@@ -1,4 +1,4 @@
-from UDS.UDS_Frame import *
+from UDS.UDSInterface import *
 import pandas as pd
 from UDS.Utils import *
 from openpyxl import load_workbook

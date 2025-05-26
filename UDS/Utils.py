@@ -1,3 +1,4 @@
+import time
 import yaml
 import os
 from collections.abc import Mapping
@@ -14,8 +15,13 @@ from typing import List, Optional, Tuple, Union
 
 Global_config_file = "Config.yml"
 
-def format_hex(n):
-    return f"0x{n:02X}"
+def format_hex(item):
+    if isinstance(item, int):
+        return f"0x{item:02X}"
+    elif isinstance(item, (bytes, bytearray)) and len(item) == 1:
+        return f"0x{item[0]:02X}"
+    else:
+        raise ValueError(f"Cannot format item: {item}")
 
 def is_hex(s):
     try:
@@ -147,7 +153,7 @@ def loadConfigFilePath(localPath=""):
 
 def verifyFrame(dataReceived, dataSent, size):
     resultStatus = False
-    if (dataReceived[0]&dataSent[0] == dataSent[0]) and ((dataReceived[0] & 0x40) == 0x40):
+    if ((dataReceived[0] & dataSent[0]) == dataSent[0]) and ((dataReceived[0] & 0x40) == 0x40):
         resultStatus = True
         for i in range(1, size):
             if (dataReceived[i] != dataSent[i]):
@@ -213,6 +219,61 @@ class PeekableQueue(queue.Queue):
 def arxml_to_dict_xmltodict(file_path):
     with open(file_path, "r", encoding="utf-8") as file:
         return xmltodict.parse(file.read())
+
+
+def wait_ms(ms: int):
+    """Wait for the given duration in milliseconds without blocking other threads."""
+    time.sleep(ms / 1000.0)
+
+# Convert int value into bytes + truncate the value to lower 24 bits (3 bytes)
+def int_to_3bytes(value: int) -> List[str]:
+    value = value & 0xFFFFFF
+    byte_seq = value.to_bytes(3, byteorder='big')
+    return list(byte_seq)
+
+# Convert int value into bytes + truncate the value to lower 16 bits (2 bytes)
+def int_to_2bytes(value: int) -> List[str]:
+    value = value & 0xFFFF
+    byte_seq = value.to_bytes(2, byteorder='big')
+    return list(byte_seq)
+
+# Checksum CRC-16-CCITT (Polynomial 0x1021)
+def crc16_ccitt(data):
+    poly = 0x1021 # ✅ Polynomial 0x1021
+    crc = 0x0000  # ✅ Initial value 
+    for b in data:
+        crc ^= b << 8
+        for _ in range(8):
+            if crc & 0x8000:
+                crc = (crc << 1) ^ poly
+            else:
+                crc <<= 1
+            crc &= 0xFFFF
+    return crc
+
+def crc16_x25(data: bytes) -> int:
+    """
+    Calculate CRC-16/X-25 (DECT-R) checksum.
+    
+    Parameters:
+        data: Input data as bytes
+        
+    Returns:
+        16-bit CRC checksum (int)
+    """
+    poly = 0x1021  # ✅ Polynomial (0x1021, but we use reversed 0x8408)
+    crc = 0xFFFF   # ✅ Initial value (will be inverted to 0x0000 after first step)
+    
+    for byte in data:
+        crc ^= byte
+        for idx in range(8):
+            if crc & 1:
+                crc = (crc >> 1) ^ 0x8408  # Reversed polynomial
+            else:
+                crc >>= 1
+    
+    crc ^= 0xFFFF  # Final XOR
+    return crc & 0xFFFF  # Ensure 16-bit result
 
 # ----------------------------------------    
 # Excel functions

@@ -1,5 +1,6 @@
-from UDS.UDS_Frame import *
+from UDS.UDSInterface import *
 import pandas as pd
+from UDS.UDSProgram import ECUProgrammer
 from UDS.Utils import *
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
@@ -244,12 +245,25 @@ if __name__ == "__main__":
         #     print(f"Programming failed: {str(e)}")
         #     # Handle error (possibly with even smaller block size)
 
+        input_ulp_file = dir_name + "\\TBMU_SW_v9.9.1.ulp"
+        out_hex_file = dir_name + "\\firmware.hex"
+
         run_srec_cat(
             srec_cat_path = dir_name + "\\Tools\\srecord-1.65.0-win64\\bin\\srec_cat.exe",
-            input_files = [(dir_name + "\\TBMU_SW_v9.9.1.ulp", "Motorola")],
-            output_file = dir_name + "\\firmware.hex",
+            input_files = [(input_ulp_file, "Motorola")],
+            output_file = out_hex_file,
             output_format = "Intel"
         )
+
+        try:
+            # Create programmer
+            programmer = ECUProgrammer(Uds)
+            
+            # Program a HEX file
+            programmer.program_hex_file(out_hex_file)
+            
+        except Exception as e:
+            logger.error(f"ECU programming failed: {str(e)}")
 
     elif(project == 'PR128'):
         Uds = UDSInterface(FileConfig=FileConfig)
