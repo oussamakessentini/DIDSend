@@ -1,7 +1,16 @@
 project: PR128
 DIDDataExcel: DIDData_PR128.xlsx
 DIDStatusExcel: DIDStatus_PR128.xlsx
-PathToArxml: ../PR128/BmsGen2/Inputs/DEXT/E401800_V8_noMappingSupplier.arxml
+# PathToArxml: ../PR128/BmsGen2/Inputs/DEXT/E401800_V8_noMappingSupplier.arxml
+PathToArxmlList:
+  - ../PR128/BmsGen2_Master/Software/Config/RtaCar/ecu_config/bsw/Dcm_SWC.arxml
+  - ../PR128/BmsGen2_Master/Software/Config/RtaCar/ecu_config/bsw/Dem_SWC.arxml
+  - ../PR128/BmsGen2_Master/Software/Config/RtaCar/ecu_config/bsw/Dcm_EcucValues_Static.arxml
+  - ../PR128/BmsGen2_Master/Software/Config/RtaCar/ecu_config/bsw/Dem_EcucValues_Static.arxml
+  - ../PR128/BmsGen2_Master/Software/Config/RtaCar/ecu_config/bsw/Fim_EcucValues_Static.arxml
+  - ../PR128/BmsGen2_Master/Software/Config/RtaCar/ecu_config/bsw/HV_BMS_Project_Dcm_EcucValues.arxml
+  - ../PR128/BmsGen2_Master/Software/Config/RtaCar/ecu_config/bsw/HV_BMS_Project_Dem_EcucValues.arxml
+  - ../PR128/BmsGen2_Master/Software/Config/RtaCar/ecu_config/bsw/HV_BMS_Project_FiM_EcucValues.arxml
 CanConfig:
   TxId: 0x18DADBF1
   RxId: 0x18DAF1DB

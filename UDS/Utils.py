@@ -126,7 +126,9 @@ def flatten_dict(obj_dest, globalVal, dictionary, Encode=False):
             if isinstance(value, dict):
                 flatten_dict(obj_dest, globalVal, value, Encode=Encode)  # Recursive call for nested dicts
             else:
-                if value in globalVal:
+                if isinstance(value, list):
+                    val = value
+                elif value in globalVal:
                     val = globalVal[value]
                 else:
                     val = value.encode() if Encode and isinstance(value, str) else value
