@@ -7,9 +7,7 @@ import pandas as pd
 DIDDataExcel = None
 DIDStatusExcel = None
 PathToArxml  = None
-PathToArxml1 = None
-PathToArxml2 = None
-# PathToArxml3 = None
+PathToArxmlList = None
 PathToMergedArxml = None
 
 def merge_arxml(files, output_file):
@@ -46,6 +44,10 @@ def extractDataFromArxml(file_path):
         tree, NULL = remove_namespace(tree)
         root = tree.getroot()
 
+        did_data_map = {}
+        rc_data_map = {}
+        rc_dataInfo_map = {}
+
         for data in root.iter("ECUC-CONTAINER-VALUE"):
             def_Val = data.find("DEFINITION-REF")
             # Get DID ID and DID Info
@@ -57,36 +59,15 @@ def extractDataFromArxml(file_path):
                 did_dataRef = find_recursive_Value(data, "DEFINITION-REF", "DcmDspDidDataRef")
                 # Get DID data Ref definition from DcmDspDidDataRef
                 did_dataRef = did_dataRef.split('/')[-1]
-
-                # Retreive RDBI\WDBI information
-                for data_s in root.iter("ECUC-CONTAINER-VALUE"):
-                    def_Val = data_s.find("DEFINITION-REF")
-                    
-                    if def_Val is not None and def_Val.text.endswith("Dcm/DcmConfigSet/DcmDsp/DcmDspData"):
-                        did_dataInfo = find_recursive(data_s, "SHORT-NAME")
-                        # Check specific DID => DcmDspData
-                        if did_dataInfo.text == did_dataRef:
-                            did_size     = find_recursive_Value(data_s, "DEFINITION-REF", "DcmDspDataSize")
-                            did_read_fct = find_recursive_Value(data_s, "DEFINITION-REF", "DcmDspDataReadFnc")
-                            did_wead_fct = find_recursive_Value(data_s, "DEFINITION-REF", "DcmDspDataWriteFnc")
-
-                            if did_size is not None:
-                                # Add +7 to rounds up and get the right size (byte numbers)
-                                # Note : // operator is the floor division operator => rounds down to the nearest whole number
-                                did_size = (int(did_size) + 7) // 8
-
-                            did_data.append({"DID": did_id, "Size" : did_size, "Read": did_read_fct, "Write": did_wead_fct})
-                            break
+                
+                if did_dataRef not in did_data_map:
+                    did_data_map[did_dataRef] = {"DID": did_id}
+                else:
+                    print(f"reassignement of {did_dataRef} is ignored")
             
-            # Retreive RC
-            if def_Val is not None and def_Val.text.endswith("Dcm/DcmConfigSet/DcmDsp/DcmDspRoutine"):
-                rc_start_fct  = find_recursive_Value(data, "DEFINITION-REF", "DcmDspStartRoutineFnc")
-                rc_stop_fct   = find_recursive_Value(data, "DEFINITION-REF", "DcmDspStopRoutineFnc")
-                rc_result_fct = find_recursive_Value(data, "DEFINITION-REF", "DcmDspRequestResultsRoutineFnc")
-                rc_id         = find_recursive_Value(data, "DEFINITION-REF", "DcmDspRoutineIdentifier")
-
-                # Convert and clean RC ID format
-                rc_id = str(hex(int(rc_id))).upper()[2:].zfill(4)
+            # Retreive RC information
+            if def_Val is not None and def_Val.text.endswith("Dcm/DcmConfigSet/DcmDsp/DcmDspRoutineInfo"):
+                rc_dataInfo = find_recursive(data, "SHORT-NAME")
 
                 rc_start_dataIn_size   = ''
                 rc_start_dataOut_size  = ''
@@ -94,53 +75,95 @@ def extractDataFromArxml(file_path):
                 rc_stop_dataOut_size   = ''
                 rc_result_dataIn_size  = ''
                 rc_result_dataOut_size = ''
+
+                rc_start_dataIn_size = find_recursive_Value(data, "DEFINITION-REF", "DcmDspStartRoutineInSignal/DcmDspRoutineSignalLength")
+                if rc_start_dataIn_size is not None:
+                    rc_start_dataIn_size = (int(rc_start_dataIn_size) + 7) // 8
+
+                rc_start_dataOut_size = find_recursive_Value(data, "DEFINITION-REF", "DcmDspStartRoutineOutSignal/DcmDspRoutineSignalLength")
+                if rc_start_dataOut_size is not None:
+                    rc_start_dataOut_size = (int(rc_start_dataOut_size) + 7) // 8
+
+                rc_stop_dataIn_size = find_recursive_Value(data, "DEFINITION-REF", "DcmDspRoutineStopInSignal/DcmDspRoutineSignalLength")
+                if rc_stop_dataIn_size is not None:
+                    rc_stop_dataIn_size = (int(rc_stop_dataIn_size) + 7) // 8
+
+                rc_stop_dataOut_size = find_recursive_Value(data, "DEFINITION-REF", "DcmDspRoutineStopOutSignal/DcmDspRoutineSignalLength")
+                if rc_stop_dataOut_size is not None:
+                    rc_stop_dataOut_size = (int(rc_stop_dataOut_size) + 7) // 8
+
+                rc_result_dataIn_size = find_recursive_Value(data, "DEFINITION-REF", "DcmDspRoutineRequestResInSignal/DcmDspRoutineSignalLength")
+                if rc_result_dataIn_size is not None:
+                    rc_result_dataIn_size = (int(rc_result_dataIn_size) + 7) // 8
+
+                rc_result_dataOut_size = find_recursive_Value(data, "DEFINITION-REF", "DcmDspRoutineRequestResOutSignal/DcmDspRoutineSignalLength")
+                if rc_result_dataOut_size is not None:
+                    rc_result_dataOut_size = (int(rc_result_dataOut_size) + 7) // 8
                 
+                if rc_dataInfo.text not in rc_dataInfo_map:
+                    rc_dataInfo_map[rc_dataInfo.text] = {}
+                    rc_dataInfo_map[rc_dataInfo.text]["Start DataIn"] = rc_start_dataIn_size
+                    rc_dataInfo_map[rc_dataInfo.text]["Stop DataIn"] = rc_stop_dataIn_size
+                    rc_dataInfo_map[rc_dataInfo.text]["Result DataIn"] = rc_result_dataIn_size
+                    rc_dataInfo_map[rc_dataInfo.text]["Start DataOut"] = rc_start_dataOut_size
+                    rc_dataInfo_map[rc_dataInfo.text]["Stop DataOut"] = rc_stop_dataOut_size
+                    rc_dataInfo_map[rc_dataInfo.text]["Result DataOut"] = rc_result_dataOut_size
+                else:
+                    print(f"{rc_dataInfo} already present")
+
+
+                
+        # Retreive RDBI\WDBI information
+        for data in root.iter("ECUC-CONTAINER-VALUE"):
+            def_Val = data.find("DEFINITION-REF")
+            
+            if def_Val is not None and def_Val.text.endswith("Dcm/DcmConfigSet/DcmDsp/DcmDspData"):
+                did_dataInfo = find_recursive(data, "SHORT-NAME")
+                # Check specific DID => DcmDspData
+                if did_dataInfo.text in did_data_map:
+                    did_size     = find_recursive_Value(data, "DEFINITION-REF", "DcmDspDataSize")
+                    did_read_fct = find_recursive_Value(data, "DEFINITION-REF", "DcmDspDataReadFnc")
+                    did_write_fct = find_recursive_Value(data, "DEFINITION-REF", "DcmDspDataWriteFnc")
+
+                    if did_size is not None:
+                        # Add +7 to rounds up and get the right size (byte numbers)
+                        # Note : // operator is the floor division operator => rounds down to the nearest whole number
+                        did_size = (int(did_size) + 7) // 8
+                    did_data_map[did_dataInfo.text]["Size"] = did_size
+                    did_data_map[did_dataInfo.text]["Read"] = did_read_fct
+                    did_data_map[did_dataInfo.text]["Write"] = did_write_fct
+
+            # Retreive RC
+            if def_Val is not None and def_Val.text.endswith("Dcm/DcmConfigSet/DcmDsp/DcmDspRoutine"):
+                rc_start_fct  = find_recursive_Value(data, "DEFINITION-REF", "DcmDspStartRoutineFnc")
+                rc_stop_fct   = find_recursive_Value(data, "DEFINITION-REF", "DcmDspStopRoutineFnc")
+                rc_result_fct = find_recursive_Value(data, "DEFINITION-REF", "DcmDspRequestResultsRoutineFnc")
+                rc_id         = find_recursive_Value(data, "DEFINITION-REF", "DcmDspRoutineIdentifier")
                 rc_info = find_recursive_Value(data, "DEFINITION-REF", "DcmDspRoutineInfoRef")
+
+                # Convert and clean RC ID format
+                rc_id = str(hex(int(rc_id))).upper()[2:].zfill(4)
+                
                 # Get RC Info definition from DcmDspRoutineInfoRef
                 if rc_info is not None:
                     rc_info = rc_info.split('/')[-1]
-                
-                # Retreive RC information
-                for data_s in root.iter("ECUC-CONTAINER-VALUE"):
-                    def_Val = data_s.find("DEFINITION-REF")
+                if rc_id not in rc_data_map:
+                    rc_data_map[rc_id] = {
+                        "RC ID": rc_id,
+                        "Start RC": rc_start_fct,
+                        "Stop RC": rc_stop_fct,
+                        "Result RC": rc_result_fct,
+                        "ref_info": rc_info
+                    }
+                    rc_data_map[rc_id] |= rc_dataInfo_map[rc_info]
+                else:
+                    print(f"reassignement of {rc_id} is ignored")
 
-                    if def_Val is not None and def_Val.text.endswith("Dcm/DcmConfigSet/DcmDsp/DcmDspRoutineInfo"):
-                        rc_dataInfo = find_recursive(data_s, "SHORT-NAME")
-
-                        # Check specific RC => DcmDspRoutineInfo
-                        if rc_dataInfo.text == rc_info:
-
-                            rc_start_dataIn_size = find_recursive_Value(data_s, "DEFINITION-REF", "DcmDspStartRoutineInSignal/DcmDspRoutineSignalLength")
-                            if rc_start_dataIn_size is not None:
-                                rc_start_dataIn_size = (int(rc_start_dataIn_size) + 7) // 8
-
-                            rc_start_dataOut_size = find_recursive_Value(data_s, "DEFINITION-REF", "DcmDspStartRoutineOutSignal/DcmDspRoutineSignalLength")
-                            if rc_start_dataOut_size is not None:
-                                rc_start_dataOut_size = (int(rc_start_dataOut_size) + 7) // 8
-
-                            rc_stop_dataIn_size = find_recursive_Value(data_s, "DEFINITION-REF", "DcmDspRoutineStopInSignal/DcmDspRoutineSignalLength")
-                            if rc_stop_dataIn_size is not None:
-                                rc_stop_dataIn_size = (int(rc_stop_dataIn_size) + 7) // 8
-
-                            rc_stop_dataOut_size = find_recursive_Value(data_s, "DEFINITION-REF", "DcmDspRoutineStopOutSignal/DcmDspRoutineSignalLength")
-                            if rc_stop_dataOut_size is not None:
-                                rc_stop_dataOut_size = (int(rc_stop_dataOut_size) + 7) // 8
-
-                            rc_result_dataIn_size = find_recursive_Value(data_s, "DEFINITION-REF", "DcmDspRoutineRequestResInSignal/DcmDspRoutineSignalLength")
-                            if rc_result_dataIn_size is not None:
-                                rc_result_dataIn_size = (int(rc_result_dataIn_size) + 7) // 8
-
-                            rc_result_dataOut_size = find_recursive_Value(data_s, "DEFINITION-REF", "DcmDspRoutineRequestResOutSignal/DcmDspRoutineSignalLength")
-                            if rc_result_dataOut_size is not None:
-                                rc_result_dataOut_size = (int(rc_result_dataOut_size) + 7) // 8
-                            break
-                            
-                rc_data.append({"RC ID": rc_id, "Start RC": rc_start_fct,   "Start DataIn": rc_start_dataIn_size,   "Start DataOut": rc_start_dataOut_size, \
-                                                "Stop RC": rc_stop_fct,     "Stop DataIn": rc_stop_dataIn_size,     "Stop DataOut": rc_stop_dataOut_size, \
-                                                "Result RC": rc_result_fct, "Result DataIn": rc_result_dataIn_size, "Result DataOut": rc_result_dataOut_size})
     else:
         print(f"extractDataFromArxml: {file_path} is not present")
 
+    did_data = list(did_data_map.values())
+    rc_data = list(rc_data_map.values())
     return did_data, rc_data
 
 
@@ -231,23 +254,16 @@ if __name__ == "__main__":
         # Extract DID\RC data :
         DIDList, RCList = extractDataFromArxml(path_arxml)
 
-    elif(PathToArxml1 is not None) and \
-        (PathToArxml2 is not None) and \
-        (PathToMergedArxml is not None):
+    elif (PathToArxmlList is not None):
 
-        path_arxml1 = os.path.join(dir_name, PathToArxml1)
-        path_arxml2 = os.path.join(dir_name, PathToArxml2)
-        # path_arxml3 = os.path.join(dir_name, PathToArxml3)
-
-        file_list = [path_arxml1, path_arxml2]
-
-        # Merge ARXML files
-        merge_arxml(file_list, PathToMergedArxml)
-        # Get merged ARXML file path
-        path_merged_arxml = os.path.join(dir_name, PathToMergedArxml)
+        file_list = [os.path.join(dir_name, PathToFile) for PathToFile in PathToArxmlList]
 
         # Extract DID\RC data :
-        DIDList, RCList = extractDataFromArxml(path_merged_arxml)
+        for file_path in file_list:
+            DIDListTemp, RCListTemp = extractDataFromArxml(file_path)
+            DIDList.extend(DIDListTemp)
+            RCList.extend(RCListTemp)
+
     else:
         print('Error : Please review the project Config file fields')
 
