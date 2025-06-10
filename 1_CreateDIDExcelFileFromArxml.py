@@ -155,7 +155,8 @@ def extractDataFromArxml(file_path):
                         "Result RC": rc_result_fct,
                         "ref_info": rc_info
                     }
-                    rc_data_map[rc_id] |= rc_dataInfo_map[rc_info]
+                    if rc_info in rc_dataInfo_map:
+                        rc_data_map[rc_id] |= rc_dataInfo_map[rc_info]
                 else:
                     print(f"reassignement of {rc_id} is ignored")
 
