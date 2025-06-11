@@ -56,7 +56,7 @@ if __name__ == "__main__":
         print("F1A1 " + str(Pcan.ReadDID("F1A1")))
 
         Pcan.StartSession(2)
-        time.sleep(2)
+        wait_ms(2000)
         print(Pcan.WriteReadRequest([0x3E, 0x00]))
         print("F012 " + str(Pcan.ReadDID("F012")))
         print("F180 " + str(Pcan.ReadDID("F180")))

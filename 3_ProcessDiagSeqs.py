@@ -62,7 +62,7 @@ def __execDiagCmd(Uds, index, line):
         status, data, error = Uds.Pcan_WriteData(str(line['Data']))
     
     elif(line['Command'].lower() == 'wait'):
-        time.sleep(float(line['Data']))
+        wait_ms(float(line['Data']) * 1000)
         status = 'OK'
 
     else:
@@ -230,40 +230,32 @@ if __name__ == "__main__":
         Uds.StartSession(3)
 
         # Execute all the diagnostic sequences
-        # processDiagSeqs(Uds)
-        # processProgSeqs(Uds)
-        # convert_ulp_to_hex("TBMU_SW_v9.9.1.ulp", "output.hex")
+        processDiagSeqs(Uds)
 
-        # Example with adaptive block sizing
-        # programmer = UDSFirmwareProgrammer(Uds)
-        # programmer.adaptive_mode = True  # Enable dynamic block size optimization
-        # programmer.set_address_size(4)   # 32-bit addressing
+        # --------------------------------------------------
+        # Programmation sequence :
+        # --------------------------------------------------
+        # processProgSeqs(Uds)
+
+        # input_ulp_file = dir_name + "\\TBMU_SW_v9.9.1.ulp"
+        # out_hex_file = dir_name + "\\firmware.hex"
+
+        # run_srec_cat(
+        #     srec_cat_path = dir_name + "\\Tools\\srecord-1.65.0-win64\\bin\\srec_cat.exe",
+        #     input_files = [(input_ulp_file, "Motorola")],
+        #     output_file = out_hex_file,
+        #     output_format = "Intel"
+        # )
 
         # try:
-        #     programmer.program_firmware('output.hex', max_retries=5)
+        #     # Create programmer
+        #     programmer = ECUProgrammer(Uds)
+            
+        #     # Program a HEX file
+        #     programmer.program_hex_file(out_hex_file)
+            
         # except Exception as e:
-        #     print(f"Programming failed: {str(e)}")
-        #     # Handle error (possibly with even smaller block size)
-
-        input_ulp_file = dir_name + "\\TBMU_SW_v9.9.1.ulp"
-        out_hex_file = dir_name + "\\firmware.hex"
-
-        run_srec_cat(
-            srec_cat_path = dir_name + "\\Tools\\srecord-1.65.0-win64\\bin\\srec_cat.exe",
-            input_files = [(input_ulp_file, "Motorola")],
-            output_file = out_hex_file,
-            output_format = "Intel"
-        )
-
-        try:
-            # Create programmer
-            programmer = ECUProgrammer(Uds)
-            
-            # Program a HEX file
-            programmer.program_hex_file(out_hex_file)
-            
-        except Exception as e:
-            logger.error(f"ECU programming failed: {str(e)}")
+        #     logger.error(f"ECU programming failed: {str(e)}")
 
     elif(project == 'PR128'):
         Uds = UDSInterface(FileConfig=FileConfig)

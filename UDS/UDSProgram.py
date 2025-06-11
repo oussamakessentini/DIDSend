@@ -36,168 +36,120 @@ class TimeoutError(UDSProgrammingError):
     """Timeout related errors"""
     pass
 
-class UDSState(Enum):
-    """Programming session states"""
-    DEFAULT = 1
-    PROGRAMMING = 2
-    SECURITY_ACCESS = 3
-    TRANSFER_DATA = 4
-    TRANSFER_EXIT = 5
+# class UDSState(Enum):
+#     """Programming session states"""
+#     DEFAULT = 1
+#     PROGRAMMING = 2
+#     SECURITY_ACCESS = 3
+#     TRANSFER_DATA = 4
+#     TRANSFER_EXIT = 5
 
-@dataclass
-class UDSConfig:
-    """Configuration for UDS communication"""
-    interface: str = 'can0'
-    request_id: int = 0x7E0
-    response_id: int = 0x7E8
-    programming_session_timeout: float = 2.0      # seconds
-    security_access_timeout: float = 1.0         # seconds
-    data_transfer_timeout: float = 5.0           # seconds
-    max_retries: int = 3
-    block_size: int = 1024                       # bytes per transfer
-    security_level: int = 1                      # Default security level
-    key_algorithm: str = 'xor_ff'                # Simple XOR algorithm for example
+# @dataclass
+# class UDSConfig:
+#     """Configuration for UDS communication"""
+#     interface: str = 'can0'
+#     request_id: int = 0x7E0
+#     response_id: int = 0x7E8
+#     programming_session_timeout: float = 2.0      # seconds
+#     security_access_timeout: float = 1.0         # seconds
+#     data_transfer_timeout: float = 5.0           # seconds
+#     max_retries: int = 3
+#     block_size: int = 1024                       # bytes per transfer
+#     security_level: int = 1                      # Default security level
+#     key_algorithm: str = 'xor_ff'                # Simple XOR algorithm for example
 
-class UDSClient:
-    def __init__(self, config: UDSConfig):
-        self.config = config
-        self.state = UDSState.DEFAULT
-        self.current_security_level = 0
-        self._last_request_time = 0
-        self._last_response_time = 0
+# class UDSClient:
+#     def __init__(self, config: UDSConfig):
+#         self.config = config
+#         self.state = UDSState.DEFAULT
+#         self.current_security_level = 0
+#         self._last_request_time = 0
+#         self._last_response_time = 0
         
-        # Set up CAN and ISO-TP stack
-        self.can_bus = can.interface.Bus(
-            channel=config.interface,
-            bustype='socketcan'
-        )
+#         # Set up CAN and ISO-TP stack
+#         self.can_bus = can.interface.Bus(
+#             channel=config.interface,
+#             bustype='socketcan'
+#         )
         
-        self.tp = isotp.socket()
-        self.tp.set_opts(
-            txpad=0x00,
-            rxpad=0x00,
-            tx_stmin=0,
-            rx_stmin=0,
-            rx_ext_address=0,
-            tx_ext_address=0
-        )
-        self.tp.bind(self.can_bus, txid=config.request_id, rxid=config.response_id)
+#         self.tp = isotp.socket()
+#         self.tp.set_opts(
+#             txpad=0x00,
+#             rxpad=0x00,
+#             tx_stmin=0,
+#             rx_stmin=0,
+#             rx_ext_address=0,
+#             tx_ext_address=0
+#         )
+#         self.tp.bind(self.can_bus, txid=config.request_id, rxid=config.response_id)
     
-    def __del__(self):
-        if hasattr(self, 'tp'):
-            self.tp.close()
-        if hasattr(self, 'can_bus'):
-            self.can_bus.shutdown()
+#     def __del__(self):
+#         if hasattr(self, 'tp'):
+#             self.tp.close()
+#         if hasattr(self, 'can_bus'):
+#             self.can_bus.shutdown()
     
-    def _send_request(self, data: bytes, timeout: float) -> bytes:
-        """Send UDS request and wait for response"""
-        try:
-            self.tp.send(data)
-            start_time = time.time()
+#     def _send_request(self, data: bytes, timeout: float) -> bytes:
+#         """Send UDS request and wait for response"""
+#         try:
+#             self.tp.send(data)
+#             start_time = time.time()
             
-            while time.time() - start_time < timeout:
-                if self.tp.available():
-                    response = self.tp.recv()
-                    if response:
-                        return response
-                time.sleep(0.01)
+#             while time.time() - start_time < timeout:
+#                 if self.tp.available():
+#                     response = self.tp.recv()
+#                     if response:
+#                         return response
+#                 wait_ms(10)
             
-            raise TimeoutError(f"No response received within {timeout:.2f} seconds")
+#             raise TimeoutError(f"No response received within {timeout:.2f} seconds")
         
-        except Exception as e:
-            raise UDSProgrammingError(f"Communication error: {str(e)}")
+#         except Exception as e:
+#             raise UDSProgrammingError(f"Communication error: {str(e)}")
     
-    def _validate_response(self, request: bytes, response: bytes) -> None:
-        """Validate the UDS response"""
-        if len(response) < 1:
-            raise UDSProgrammingError("Empty response received")
+#     def _validate_response(self, request: bytes, response: bytes) -> None:
+#         """Validate the UDS response"""
+#         if len(response) < 1:
+#             raise UDSProgrammingError("Empty response received")
             
-        # Check for negative response
-        if response[0] == 0x7F:
-            error_code = response[2] if len(response) > 2 else 0
-            raise UDSProgrammingError(f"Negative response received. Service: 0x{request[0]:02X}, Error: 0x{error_code:02X}")
+#         # Check for negative response
+#         if response[0] == 0x7F:
+#             error_code = response[2] if len(response) > 2 else 0
+#             raise UDSProgrammingError(f"Negative response received. Service: 0x{request[0]:02X}, Error: 0x{error_code:02X}")
             
-        # Check SID (should be request SID + 0x40)
-        expected_sid = request[0] + 0x40
-        if response[0] != expected_sid:
-            raise UDSProgrammingError(f"Unexpected response SID. Expected: 0x{expected_sid:02X}, Got: 0x{response[0]:02X}")
+#         # Check SID (should be request SID + 0x40)
+#         expected_sid = request[0] + 0x40
+#         if response[0] != expected_sid:
+#             raise UDSProgrammingError(f"Unexpected response SID. Expected: 0x{expected_sid:02X}, Got: 0x{response[0]:02X}")
     
-    def _generate_key(self, seed: bytes) -> bytes:
-        """Generate security key from seed (example implementation)"""
-        if self.config.key_algorithm == 'xor_ff':
-            # Simple XOR with 0xFF for demonstration
-            return bytes([b ^ 0xFF for b in seed])
-        else:
-            raise SecurityAccessError(f"Unsupported key algorithm: {self.config.key_algorithm}")
+#     def _generate_key(self, seed: bytes) -> bytes:
+#         """Generate security key from seed (example implementation)"""
+#         if self.config.key_algorithm == 'xor_ff':
+#             # Simple XOR with 0xFF for demonstration
+#             return bytes([b ^ 0xFF for b in seed])
+#         else:
+#             raise SecurityAccessError(f"Unsupported key algorithm: {self.config.key_algorithm}")
     
-    def change_session(self, session_type: int) -> None:
-        """Change diagnostic session (10)"""
-        request = bytes([0x10, session_type])
+#     def change_session(self, session_type: int) -> None:
+#         """Change diagnostic session (10)"""
+#         request = bytes([0x10, session_type])
         
-        for attempt in range(self.config.max_retries):
-            try:
-                response = self._send_request(request, self.config.programming_session_timeout)
-                self._validate_response(request, response)
+#         for attempt in range(self.config.max_retries):
+#             try:
+#                 response = self._send_request(request, self.config.programming_session_timeout)
+#                 self._validate_response(request, response)
                 
-                if session_type == 0x02:  # Programming session
-                    self.state = UDSState.PROGRAMMING
-                else:
-                    self.state = UDSState.DEFAULT
-                logger.info(f"Session changed to 0x{session_type:02X}")
-                return
+#                 if session_type == 0x02:  # Programming session
+#                     self.state = UDSState.PROGRAMMING
+#                 else:
+#                     self.state = UDSState.DEFAULT
+#                 logger.info(f"Session changed to 0x{session_type:02X}")
+#                 return
                 
-            except (UDSProgrammingError, TimeoutError) as e:
-                logger.warning(f"Session change attempt {attempt + 1} failed: {str(e)}")
-                if attempt == self.config.max_retries - 1:
-                    raise UDSProgrammingError(f"Failed to change session after {self.config.max_retries} attempts")
-    
-    def security_access(self, level: int) -> None:
-        """Security Access (27)"""
-        if level % 2 != 1:
-            raise SecurityAccessError("Request seed must use an odd security level")
-            
-        # Request seed
-        request = bytes([0x27, level])
-        response = self._send_request(request, self.config.security_access_timeout)
-        self._validate_response(request, response)
-        
-        # Process seed
-        seed = response[2:]  # Skip SID and subfunction
-        logger.debug(f"Received seed: {binascii.hexlify(seed).decode()}")
-        
-        # Generate key
-        key = self._generate_key(seed)
-        logger.debug(f"Generated key: {binascii.hexlify(key).decode()}")
-        
-        # Send key
-        request = bytes([0x27, level + 1]) + key
-        response = self._send_request(request, self.config.security_access_timeout)
-        self._validate_response(request, response)
-        
-        self.current_security_level = level + 1
-        self.state = UDSState.SECURITY_ACCESS
-        logger.info(f"Security access granted at level {level + 1}")
-    
-    def request_download(self, address: int, size: int) -> None:
-        """Request Download (34)"""
-        # Format address and size parameters (32-bit)
-        address_bytes = address.to_bytes(4, 'big')
-        size_bytes = size.to_bytes(4, 'big')
-        
-        request = bytes([0x34, 0x00]) + address_bytes + size_bytes  # 0x00 = 32-bit for both
-        response = self._send_request(request, self.config.data_transfer_timeout)
-        self._validate_response(request, response)
-        
-        self.state = UDSState.TRANSFER_DATA
-        logger.debug(f"Download requested for {size} bytes at 0x{address:08X}")
-    
-    def transfer_data(self, block_number: int, data: bytes) -> None:
-        """Transfer Data (36)"""
-        request = bytes([0x36, block_number % 256]) + data
-        response = self._send_request(request, self.config.data_transfer_timeout)
-        self._validate_response(request, response)
-        
-        logger.debug(f"Transferred block {block_number} with {len(data)} bytes")
+#             except (UDSProgrammingError, TimeoutError) as e:
+#                 logger.warning(f"Session change attempt {attempt + 1} failed: {str(e)}")
+#                 if attempt == self.config.max_retries - 1:
+#                     raise UDSProgrammingError(f"Failed to change session after {self.config.max_retries} attempts")
 
 class ECUProgrammer:
     def __init__(self, uds_client: UDSInterface):
@@ -278,23 +230,15 @@ class ECUProgrammer:
         tp = TesterPresentThread(self.Uds, interval=0.5)
         tp.start()
         
-        # time.sleep(1)
-        # tp.pause()
         self.Uds.ReadDID('F080')
         self.Uds.ReadDID('F0FE')
-        # time.sleep(1)
-        # tp.resume()
         
+        tp.pause()
         SA_OK = False
         while (SA_OK == False):
-            wait_ms(500)
-            
             # Request security access
-            print('')
-            time.sleep(1)
-            tp.pause()
             SA_OK = self.Uds.SecurityAccess(self.security_level)
-            print('')
+            wait_ms(500)
         
         self.security_level = 2
         # Manually provide a 32-bit (4-byte) key
@@ -306,15 +250,13 @@ class ECUProgrammer:
             
             rc_ok = False
             while (rc_ok == False):
-                wait_ms(500)
-                
                 # Request security access
-                print('')
                 status, resp, error = self.Uds.ResultRC('FF00')
 
                 if(status == 'ROUTINE_FINISHED_OK'):
                     rc_ok = True
-                print('')
+                else:
+                    wait_ms(500)
 
         program_ok = False
         # Program each segment

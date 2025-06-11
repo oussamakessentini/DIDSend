@@ -203,6 +203,8 @@ class UDSInterface():
         :param rc_st_byte: The RC status byte (integer or hex) to check.
         :return: Description of the RC status byte.
         """
+        retCode = ""
+
         uds_rc_st_codes = {
             0x1: "ROUTINE_IN_PROCESS",
             0x2: "ROUTINE_FINISHED_OK",
@@ -212,9 +214,13 @@ class UDSInterface():
         # Convert to integer if input is a string with "0x"
         if isinstance(rc_st_byte, str) and rc_st_byte.startswith("0x"):
             rc_st_byte = int(rc_st_byte, 16)
-
+        
+        if rc_st_byte > 3 :
+            retCode = self.__get_uds_nrc_description(rc_st_byte)
+        else:
+            retCode = uds_rc_st_codes.get(rc_st_byte, "Unknown RC status code")
         # Lookup the NRC byte
-        return uds_rc_st_codes.get(rc_st_byte, "Unknown RC status code")
+        return retCode
 
     def ReadMessages(self):
         """
@@ -255,7 +261,7 @@ class UDSInterface():
                     st_min = fc_message['data'][2]
                     break
                 elif self.IsFiltered == True:
-                    time.sleep(0.05)
+                    wait_ms(5)
             else:
                 raise RuntimeError("No Flow Control received.")
 
@@ -270,7 +276,7 @@ class UDSInterface():
                 seq_number = (seq_number + 1) % 16  # Sequence number wraps around
 
                 # Wait for separation time (STmin)
-                time.sleep(st_min / 1000.0)
+                wait_ms(st_min)
 
     def __ReadMessagesThread(self):
         """Worker function that runs in a separate thread"""
@@ -483,7 +489,7 @@ class UDSInterface():
                 return_value["response"] = e
                 return_value["status"] = False
         
-        print(return_value) # For debug
+        # print(return_value) # For debug
         return return_value
 
     def ReadDID(self, DID, decode=None):
@@ -1021,7 +1027,7 @@ class UDSInterface():
                 if (msg is not None) and (msg['id'] == canId):
                     break
                 elif self.IsFiltered == True:
-                    time.sleep(0.1)
+                    wait_ms(100)
         return msg
 
     def __decodeFrame(self, data, size):
@@ -1144,7 +1150,7 @@ class ControllableThread(threading.Thread):
             self._pause_event.wait()  # Wait here if paused
             with self._lock:
                 self.on_tick()
-            time.sleep(self.interval)
+            wait_ms(self.interval * 1000)
         self.on_stop()
 
     def pause(self):
@@ -1219,17 +1225,3 @@ class TesterPresentThread(ControllableThread):
     def on_stop(self):
         print("[TesterPresent] Stopped")
 
-    # def run(self):
-    #     logger.info("Starting TesterPresent rolling task")
-    #     while self.running.is_set():
-    #         try:
-    #             respData = self.Uds.WriteReadRequest([UDSService.TESTER_PRESENT, 0x00])
-    #             # print(str(respData['response']))
-    #             logger.debug(f"Sent TesterPresent Request = {respData['request']} \ Response = {respData['response']}")
-    #         except Exception as e:
-    #             logger.warning(f"TesterPresent failed: {e}")
-    #         time.sleep(self.interval)
-
-    # def stop(self):
-    #     logger.info("Stopping TesterPresent rolling task")
-    #     self.running.clear()
