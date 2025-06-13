@@ -1,3 +1,4 @@
+import shutil
 import time
 import yaml
 import os
@@ -12,6 +13,7 @@ from openpyxl.formatting.rule import CellIsRule
 import subprocess
 import logging
 from typing import List, Optional, Tuple, Union
+from Lib.Pdx_Odx import *
 
 Global_config_file = "Config.yml"
 
@@ -394,3 +396,32 @@ def run_srec_cat(
     except Exception as ex:
         logging.exception(f"Unexpected error while running srec_cat: {ex}")
         return False
+
+# ----------------------------------------    
+# PDX functions
+# ----------------------------------------
+def extractPdxFileInfo(pdx_file):
+    odxC = Pdx_Odx()
+    pdx_temp_path = os.path.dirname(os.path.abspath(__file__)) + "_Temp/"
+    # print(pdx_temp_path)
+    if os.path.exists(pdx_temp_path):
+        shutil.rmtree(pdx_temp_path)
+        # print("\nRemove old PDX file\n")
+    
+    if pdx_file.lower().endswith(".pdx"):
+        odxC.pdx_unzip(pdx_file, pdx_temp_path)
+        odxfDataFile = odxC.getFilePath(pdx_temp_path, None, '.odx-f')
+        # print(odxDataFile)
+        try:
+            pdxDict = odxC.getPdxData(odxfDataFile)
+            print(pdxDict)
+        except:
+            print("Error : PDX file data extraction")
+    else:
+        # Clear old PDX read data :
+        print("[Warning] Read PDX => PDX file not found =>", pdx_file)
+    
+    # Delete the temporary folder
+    # shutil.rmtree(pdx_temp_path)
+
+    return pdxDict

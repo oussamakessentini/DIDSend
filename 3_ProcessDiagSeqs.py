@@ -226,6 +226,7 @@ if __name__ == "__main__":
     if(project == 'PR105'):
         Uds = UDSInterface(FileConfig=FileConfig)
         
+        extractPdxFileInfo(dir_name + "\\To_Program\\PDX\\TBMU_SUB_APP_F9.0.4_TBMU_MAIN_APP_F9.10.0_APPLICATION_DATA_compressed.pdx")
         # Activate extented session before executing Excel file
         Uds.StartSession(3)
 

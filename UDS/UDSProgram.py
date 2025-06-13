@@ -192,18 +192,17 @@ class ECUProgrammer:
     def program_data(self, address: int, data: bytes) -> None:
         """Program data to ECU memory"""
         try:
-
-            for i in range(0, len(data), self.block_size):
-                block = data[i:i + self.block_size]
-                # print(len(block))
+            for idx in range(0, len(data), self.block_size):
+                block = data[idx:idx + self.block_size]
                 self.Uds.TransferData(self.block_number, block, address)
+
                 # Check block number overflow
                 if self.block_number < 0xFF:
                     self.block_number += 1
                 else:
                     self.block_number = 0
-                # print(hex(self.block_number))
-                # logger.info(f"Progress: {min(i + self.block_size, len(data))}/{len(data)} bytes")
+                
+                # logger.info(f"Block : {hex(self.block_number)} => Progress: {min(i + self.block_size, len(data))}/{len(data)} bytes")
             
             logger.info(f"Successfully programmed {len(data)} bytes at 0x{address:08X}")
             
