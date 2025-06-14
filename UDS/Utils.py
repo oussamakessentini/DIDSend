@@ -65,12 +65,31 @@ def get_dlc_for_data_length(data_length):
 
     return -1  # If the length is out of range
 
-def string_to_hexList(strData, symbol=''):
+def str_to_hexList(strData, symbol=''):
     data = []
-    if strData:
-        for group in strData.split(symbol):
-            if group:
-                data.extend([int(x, 16) for x in group.split() if x])
+    def is_hex_string(s: str) -> bool:
+        if len(s) % 2 != 0:
+            return False  # Hex data must be even-length for byte pairs
+        try:
+            bytes.fromhex(s)  # Will raise ValueError if not valid hex
+            return True
+        except ValueError:
+            return False
+        
+    if len(strData) > 1:
+        if(symbol != ''):
+            for group in strData.split(symbol):
+                if group:
+                    data.extend([int(x, 16) for x in group.split() if x])
+        else:
+            if is_hex_string(strData):
+                # Treat as hex string and convert every 2 characters into a byte
+                data = [int(strData[i:i+2], 16) for i in range(0, len(strData), 2)]
+            else:
+                # Treat as regular string and convert each character to its ASCII value
+                data = [ord(intData) for intData in strData]
+    else:
+        data = [int(strData)]
     return data
 
 def load_config(obj_dest, globalVal, config_file, Encode=False):
@@ -402,6 +421,9 @@ def run_srec_cat(
 # ----------------------------------------
 def extractPdxFileInfo(pdx_file):
     odxC = Pdx_Odx()
+    pdxDict = {}
+    odxfDataFile = ''
+    pdxfBinFile = ''
     pdx_temp_path = os.path.dirname(os.path.abspath(__file__)) + "_Temp/"
     # print(pdx_temp_path)
     if os.path.exists(pdx_temp_path):
@@ -411,10 +433,11 @@ def extractPdxFileInfo(pdx_file):
     if pdx_file.lower().endswith(".pdx"):
         odxC.pdx_unzip(pdx_file, pdx_temp_path)
         odxfDataFile = odxC.getFilePath(pdx_temp_path, None, '.odx-f')
+        pdxfBinFile  = odxC.getFilePath(pdx_temp_path, None, '.bin')
         # print(odxDataFile)
         try:
             pdxDict = odxC.getPdxData(odxfDataFile)
-            print(pdxDict)
+            # print(pdxDict)
         except:
             print("Error : PDX file data extraction")
     else:
@@ -424,4 +447,4 @@ def extractPdxFileInfo(pdx_file):
     # Delete the temporary folder
     # shutil.rmtree(pdx_temp_path)
 
-    return pdxDict
+    return pdxfBinFile, odxfDataFile, pdxDict

@@ -388,7 +388,7 @@ class UDSInterface():
                             return_value["status"] = True
                             break
                         
-                        elif (msg['data'][0] == 0x74) and (msg['data'][1] == 0x10):
+                        elif (msg['data'][0] == 0x74):
                             return_value["response"] = [format_hex(item) for item in msg['data']]
                             return_value["status"] = True
                             break
@@ -472,10 +472,14 @@ class UDSInterface():
                         elif((rc_msg['id'] == self.RxId) and\
                                 (rc_msg['data'][1] == 0x7F) and\
                                 (rc_msg['data'][2] == 0x31)):
-                            # return 'NOK', rc_msg['data'], ('ResultRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
-                            return_value["response"] = [format_hex(item) for item in rc_msg['data']]
-                            return_value["status"] = False
-                            break
+                            if (rc_msg['data'][3] == 0x78):
+                                # Pending still in progress
+                                continue
+                            else:
+                                # return 'NOK', rc_msg['data'], ('ResultRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
+                                return_value["response"] = [format_hex(item) for item in rc_msg['data']]
+                                return_value["status"] = False
+                                break
                         else:
                             return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                             return_value["status"] = False
@@ -559,7 +563,7 @@ class UDSInterface():
             message = [0x2E, did_high, did_low] + data
 
             data = self.WriteReadRequest(message)
-
+            # print(data) # For debug
             if data["status"] == True:
                 return [f"Write {DID}", True]
             else:
@@ -587,7 +591,7 @@ class UDSInterface():
         except Exception as e:
             return [f'NOK', '', e]
 
-    def StartRC(self, DID, data=None):
+    def StartRC(self, DID, data=None, timeout=2):
         """
         Start routine controle using UDS (0x31).
 
@@ -622,7 +626,7 @@ class UDSInterface():
                 else:
                     message = [len(startRcMsgPL + data)] + startRcMsgPL + data
             
-            resp = self.RcRequest(message)
+            resp = self.RcRequest(message, timeout)
             
             if resp["status"] == True:
                 if(resp["response"][0] == '0x04'):
@@ -796,6 +800,11 @@ class UDSInterface():
 
         if not (1 <= address_length <= 4 and 1 <= size_length <= 4):
             raise ValueError("Address and size format must be 1–4 bytes")
+        
+        # Cast the memory address according to the defined address_length
+        delta_s = 4 - address_length
+        memory_address = memory_address >> (delta_s * 8)
+        # print("memory_address = ", hex(memory_address)) # For debug
 
         addr_bytes = memory_address.to_bytes(address_length, 'big')
         size_bytes = memory_size.to_bytes(size_length, 'big')
@@ -808,46 +817,44 @@ class UDSInterface():
             f"Addr=0x{memory_address:X} (len={address_length}), "
             f"Size=0x{memory_size:X} (len={size_length})"
         )
-        payload = [0x34, 0x82, 0x11, 0x00, 0x00]
+        # payload = [0x34, 0x82, 0x11, 0x00, 0x00]
         respData = self.WriteReadRequest(payload)
-        print(respData)
-        return True
-    
-    def RequestDownload_2(
-        self,
-    ) -> bytes:
-        respData = self.WriteReadRequest([0x34, 0x83, 0x11, 0x00, 0x00])
-        print(respData)
+        # print(respData) # For debug
         return True
     
     def TransferData(self, block_number: int, data: bytes, address: int) -> bool:
         # """Transfer data block"""
         try:
-            payload_1 = [0x36, block_number] + int_to_3bytes(address)
-            payload_1.append(len(data))
-            # print("payload_1 = ", [format_hex(item) for item in payload_1])
-            # print("payload_1 = ", payload_1)
-            # print("payload_1 = ", bytearray(payload_1))
-
-            # print("Block H = ", data.hex())
-            # print("Block = ", data)
-            # print("Block len = ", len(data))
-            payload = bytearray(payload_1) + bytearray(data)
-            # print("payload = ", payload.hex())
-            # print("payload len = ",len(payload))
+            if address > 0:
+                payload_1 = [0x36, block_number] + int_to_3bytes(address)
             
-            # Calculate Payload + Data Block CRC
-            payload_crc = crc16_x25(payload) # Calculate CRC for block data
-            payload_crc = ((payload_crc & 0xFF) << 8) | ((payload_crc >> 8) & 0xFF)
-            payload_crc = int_to_2bytes(payload_crc)
-            # print('block crc =', payload_crc)
+                # payload_1.append(len(data))
+                # print("payload_1 = ", [format_hex(item) for item in payload_1])
+                # print("payload_1 = ", payload_1)
+                # print("payload_1 = ", bytearray(payload_1))
 
-            # Add CRC to the payload
-            final_payload = payload + bytearray(payload_crc)
-            # print(final_payload.hex())
+                # print("Block H = ", data.hex())
+                # print("Block = ", data)
+                # print("Block len = ", len(data))
+                payload = bytearray(payload_1) + bytearray(data)
+                # print("payload = ", payload.hex())
+                # print("payload len = ",len(payload))
+                
+                # Calculate Payload + Data Block CRC
+                payload_crc = crc16_x25(payload) # Calculate CRC for block data
+                payload_crc = ((payload_crc & 0xFF) << 8) | ((payload_crc >> 8) & 0xFF)
+                payload_crc = int_to_2bytes(payload_crc)
+                # print('block crc =', payload_crc)
+
+                # Add CRC to the payload
+                final_payload = payload + bytearray(payload_crc)
+                # print(final_payload.hex())
+            else:
+                payload_1 = [0x36, block_number]
+                final_payload = bytearray(payload_1) + bytearray(data)
             
             respData = self.WriteReadRequest(list(final_payload))
-            # print(respData["response"])
+            # print(respData["response"]) # For debug
 
 
             if len(respData["response"]) >= 2 and \
@@ -868,7 +875,7 @@ class UDSInterface():
         """Request transfer exit (finish download)"""
         try:
             respData = self.WriteReadRequest([0x37])
-            print(respData)
+            # print(respData) # For debug
             if respData["status"] == True:
                 return True
             else:
@@ -953,7 +960,7 @@ class UDSInterface():
 
     def Pcan_WriteDID(self, did, dataraw=None):
         # Clean raw data
-        data = string_to_hexList(dataraw, ';')
+        data = str_to_hexList(dataraw, ';')
         # Process diagnostic request
         retVal = self.WriteDID(did, data)
         # Process the result
@@ -968,14 +975,14 @@ class UDSInterface():
 
     def Pcan_WriteData(self, dataraw=None):
         # Clean raw data
-        data = string_to_hexList(dataraw, ';')
+        data = str_to_hexList(dataraw, ';')
 
         # Process diagnostic request
         return self.WriteData(data)
 
     def Pcan_StartRC(self, rcdid, dataraw=None):
         # Clean raw data
-        data = string_to_hexList(dataraw, ';')
+        data = str_to_hexList(dataraw, ';')
 
         # Process diagnostic request
         return self.StartRC(rcdid, data)
@@ -990,7 +997,7 @@ class UDSInterface():
     
     def Pcan_ClearDTC(self, dataraw=None):
         # Clean raw data
-        data = string_to_hexList(dataraw, ';')
+        data = str_to_hexList(dataraw, ';')
 
         # Process diagnostic request
         retVal = self.ClearDTC(data)

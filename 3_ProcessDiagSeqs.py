@@ -1,6 +1,6 @@
 from UDS.UDSInterface import *
 import pandas as pd
-from UDS.UDSProgram import ECUProgrammer
+from UDS.UDSProgram import *
 from UDS.Utils import *
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
@@ -226,12 +226,20 @@ if __name__ == "__main__":
     if(project == 'PR105'):
         Uds = UDSInterface(FileConfig=FileConfig)
         
-        extractPdxFileInfo(dir_name + "\\To_Program\\PDX\\TBMU_SUB_APP_F9.0.4_TBMU_MAIN_APP_F9.10.0_APPLICATION_DATA_compressed.pdx")
+        pdxfBinFile, odxfDataFile, pdxDict = extractPdxFileInfo(dir_name + "\\To_Program\\PDX\\PBMS_HBF_F020D20_TBMU_SUB_BFL_7.2.4_PBMS_MBF_F050D11_BOOT_compressed.pdx")
+        
+        # Programmation Configuration
+        # prog_config = UDSPdxProgConfig()
+        programmer = ECUProgrammer(Uds, UDSPdxProgConfig())
+        
+        # Program a Binary file
+        programmer.program_pdx_bin_file(pdxfBinFile, pdxDict)
+
         # Activate extented session before executing Excel file
-        Uds.StartSession(3)
+        # Uds.StartSession(3)
 
         # Execute all the diagnostic sequences
-        processDiagSeqs(Uds)
+        # processDiagSeqs(Uds)
 
         # --------------------------------------------------
         # Programmation sequence :
@@ -249,8 +257,8 @@ if __name__ == "__main__":
         # )
 
         # try:
-        #     # Create programmer
-        #     programmer = ECUProgrammer(Uds)
+            # # Programmation Configuration
+        #     programmer = ECUProgrammer(Uds, UDSPdxProgConfig())
             
         #     # Program a HEX file
         #     programmer.program_hex_file(out_hex_file)
