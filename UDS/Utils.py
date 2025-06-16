@@ -419,21 +419,95 @@ def run_srec_cat(
 # ----------------------------------------    
 # PDX functions
 # ----------------------------------------
+def get_all_files_path(
+    folder_path: str, 
+    allowed_extensions: Optional[List[str]] = None,
+    exclude_hidden: bool = True
+) -> List[str]:
+    """
+    Recursively retrieves all files path in a directory and its subdirectories.
+    
+    Args:
+        folder_path (str): Path to the directory to scan.
+        allowed_extensions (List[str], optional): Only include files with these extensions (e.g., ['.txt', '.csv']). 
+            If None, all files are included. Defaults to None.
+        exclude_hidden (bool): Whether to exclude hidden files (starting with '.'). Defaults to True.
+    
+    Returns:
+        List[str]: List of absolute file paths.
+    
+    Raises:
+        ValueError: If folder_path does not exist or is not a directory.
+        PermissionError: If access to the folder is denied.
+    """
+    # Set up logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    
+    file_paths = []
+    
+    try:
+        # Validate input path
+        if not os.path.exists(folder_path):
+            raise ValueError(f"Path does not exist: {folder_path}")
+        if not os.path.isdir(folder_path):
+            raise ValueError(f"Path is not a directory: {folder_path}")
+        
+        # Walk through directory
+        for root, tmp, files in os.walk(folder_path):
+            for file in files:
+                # Skip hidden files if enabled
+                if exclude_hidden and file.startswith('.'):
+                    continue
+                
+                # Check file extension
+                file_path = os.path.join(root, file)
+                if allowed_extensions:
+                    tmp, ext = os.path.splitext(file)
+                    if ext.lower() not in allowed_extensions:
+                        continue
+                
+                file_paths.append(os.path.abspath(file_path))
+        
+        logger.info(f"Found {len(file_paths)} files in {folder_path}")
+        return file_paths
+    
+    except PermissionError as e:
+        logger.error(f"Permission denied while accessing {folder_path}: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error while scanning {folder_path}: {e}")
+        raise
+
+def remove_extension(file_path: str) -> str:
+    """Removes the file extension while preserving the rest of the path.
+    
+    Args:
+        file_path: Input file path (e.g., '/dir/subdir/file.txt')
+    
+    Returns:
+        Path without extension (e.g., '/dir/subdir/file')
+    """
+    base, _ = os.path.splitext(file_path)
+    return base
+
 def extractPdxFileInfo(pdx_file):
     odxC = Pdx_Odx()
     pdxDict = {}
     odxfDataFile = ''
     pdxfBinFile = ''
-    pdx_temp_path = os.path.dirname(os.path.abspath(__file__)) + "_Temp/"
-    # print(pdx_temp_path)
-    if os.path.exists(pdx_temp_path):
-        shutil.rmtree(pdx_temp_path)
+
+    PdxFilePath = remove_extension(pdx_file) + '\\'
+    # print(PdxFilePath)
+
+    if os.path.exists(PdxFilePath):
+        shutil.rmtree(PdxFilePath)
         # print("\nRemove old PDX file\n")
     
     if pdx_file.lower().endswith(".pdx"):
-        odxC.pdx_unzip(pdx_file, pdx_temp_path)
-        odxfDataFile = odxC.getFilePath(pdx_temp_path, None, '.odx-f')
-        pdxfBinFile  = odxC.getFilePath(pdx_temp_path, None, '.bin')
+        odxC.pdx_unzip(pdx_file, PdxFilePath)
+        odxfDataFile = odxC.getFilePath(PdxFilePath, None, '.odx-f')
+        pdxfBinFile  = odxC.getFilePath(PdxFilePath, None, '.bin')
         # print(odxDataFile)
         try:
             pdxDict = odxC.getPdxData(odxfDataFile)

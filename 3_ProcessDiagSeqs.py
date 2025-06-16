@@ -226,14 +226,17 @@ if __name__ == "__main__":
     if(project == 'PR105'):
         Uds = UDSInterface(FileConfig=FileConfig)
         
-        pdxfBinFile, odxfDataFile, pdxDict = extractPdxFileInfo(dir_name + "\\To_Program\\PDX\\PBMS_HBF_F020D20_TBMU_SUB_BFL_7.2.4_PBMS_MBF_F050D11_BOOT_compressed.pdx")
-        
-        # Programmation Configuration
-        # prog_config = UDSPdxProgConfig()
-        programmer = ECUProgrammer(Uds, UDSPdxProgConfig())
-        
-        # Program a Binary file
-        programmer.program_pdx_bin_file(pdxfBinFile, pdxDict)
+        files_list = get_all_files_path(dir_name + "\\To_Program\\PDX\\", ['.pdx'])
+        print(files_list)
+        for file in files_list:
+            pdxfBinFile, odxfDataFile, pdxDict = extractPdxFileInfo(file)
+
+            # Programmation Configuration
+            programmer = ECUProgrammer(Uds, UDSPdxProgConfig())
+            
+            # Program a Binary file
+            programmer.program_pdx_bin_file(pdxfBinFile, pdxDict)
+
 
         # Activate extented session before executing Excel file
         # Uds.StartSession(3)
@@ -244,27 +247,29 @@ if __name__ == "__main__":
         # --------------------------------------------------
         # Programmation sequence :
         # --------------------------------------------------
-        # processProgSeqs(Uds)
 
-        # input_ulp_file = dir_name + "\\TBMU_SW_v9.9.1.ulp"
-        # out_hex_file = dir_name + "\\firmware.hex"
+        # files_list = get_all_files_path(dir_name + "\\To_Program\\ULP\\", ['.ulp'])
+        # print(files_list)
 
-        # run_srec_cat(
-        #     srec_cat_path = dir_name + "\\Tools\\srecord-1.65.0-win64\\bin\\srec_cat.exe",
-        #     input_files = [(input_ulp_file, "Motorola")],
-        #     output_file = out_hex_file,
-        #     output_format = "Intel"
-        # )
+        # output_file = ""
 
-        # try:
-            # # Programmation Configuration
-        #     programmer = ECUProgrammer(Uds, UDSPdxProgConfig())
-            
-        #     # Program a HEX file
-        #     programmer.program_hex_file(out_hex_file)
-            
-        # except Exception as e:
-        #     logger.error(f"ECU programming failed: {str(e)}")
+        # for idx, file in enumerate(files_list):
+        #     run_srec_cat(
+        #         srec_cat_path = dir_name + "\\Tools\\srecord-1.65.0-win64\\bin\\srec_cat.exe",
+        #         input_files = [(file, "Motorola")],
+        #         output_file = remove_extension(file) + f'_{idx + 1}.hex',
+        #         output_format = "Intel"
+        #     )
+
+        #     try:
+        #         # Programmation Configuration
+        #         programmer = ECUProgrammer(Uds, UDSPdxProgConfig())
+                
+        #         # Program a HEX file
+        #         programmer.program_hex_file(output_file)
+                
+        #     except Exception as e:
+        #         logger.error(f"ECU programming failed: {str(e)}")
 
     elif(project == 'PR128'):
         Uds = UDSInterface(FileConfig=FileConfig)
