@@ -176,13 +176,13 @@ class ECUProgrammer:
                 else:
                     wait_ms(500)
 
-        program_ok = False
+        reqDL = False
         # Program each segment
         for address, data in firmware_data.items():
             if(address >= 0x4000): # Skip the first segment
-                if program_ok == False:
-                    program_ok = self.Uds.RequestDownload(address, len(data))
-                if program_ok == True:
+                if reqDL == False:
+                    reqDL = self.Uds.RequestDownload(address, len(data))
+                if reqDL == True:
                     data_bytes = bytes(data)
                     logger.info(f"Programming segment at 0x{address:08X} ({len(data_bytes)} bytes)")
                     self.program_data(address, data_bytes)
@@ -202,10 +202,11 @@ class ECUProgrammer:
         
         wait_ms(50)
 
-        program_ok = self.Uds.RequestDownload_2()
-
-        payload = [0x36, 0x01, 0xff, 0xff, 0x00, 0x00, 0x13, 0x09, 0x15, 0x11, 0x22, 0x09, 0x01, 0x00, 0x00, 0x24, 0x05, 0x25, 0xfe, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x5c, 0xe3, 0x6e, 0x50, 0xad]
-        respData = self.Uds.WriteReadRequest(payload)
+        reqDL = self.Uds.WriteReadRequest([0x34, 0x83, 0x11, 0x00, 0x00])
+        if reqDL == True:
+            payload = [0x36, 0x01, 0xff, 0xff, 0x00, 0x00, 0x13, 0x09, 0x15, 0x11, 0x22, 0x09, 0x01, 0x00, 0x00, 0x24, 0x05, 0x25, 0xfe, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x5c, 0xe3, 0x6e, 0x50, 0xad]
+            respData = self.Uds.WriteReadRequest(payload)
+            if respData["status"] == False: raise UDSProgrammingError("No data found in HEX file")
 
         wait_ms(50)
         
@@ -302,11 +303,12 @@ class ECUProgrammer:
 
                         # print("Segment size = ", len(seg_data[seg['ID']]))
 
-                        reqDL = self.Uds.RequestDownload(self.start_address,
-                                                         seg['UNCOMPRESSED-SIZE'],
-                                                         address_format=0x34,
-                                                         data_format=0x10,
+                        reqDL = self.Uds.RequestDownload(data_format=0x10,
+                                                         addr_length_format=0x34,
+                                                         memory_addr=self.start_address,
+                                                         memory_size=seg['UNCOMPRESSED-SIZE'],
                                                          segment_name=seg['ID'])
+
                         if reqDL == True:
                             logger.info(f"Programming segment at 0x{self.start_address:08X} ({len(seg_data[seg['ID']])} bytes)")
                             self.program_data(self.start_address, seg_data[seg['ID']], True)
@@ -348,7 +350,7 @@ class ECUProgrammer:
                     if(retData[0] != 'OK'): raise UDSProgrammingError("StartRC('070A') => Failed")
 
                     extra_data = pdxInfo['SW_REFERENCE'].replace('REF.', "") # ASCII => PBMS_XXXX
-                    print("PDX SW_REFERENCE = ", extra_data)
+                    print("PDX SW_REFERENCE = ", extra_data, '\n')
 
                     retData = self.Uds.WriteDID('F01C',
                                                 str_to_hexList(pdxInfo['TOB']) +

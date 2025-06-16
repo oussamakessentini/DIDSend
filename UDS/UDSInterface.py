@@ -777,50 +777,66 @@ class UDSInterface():
     
     def RequestDownload(
         self,
-        memory_address: int,
-        memory_size: int,
-        address_format: int = 0x44,
         data_format: int = 0x00,
+        addr_length_format: int = 0x44,
+        memory_addr: int = 0x00,
+        memory_size: int = 0x00,
         segment_name: str = None
     ) -> bytes:
         """
         Sends a RequestDownload (SID 0x34) with configurable address and size formats.
 
         Parameters:
-            memory_address (int): Starting address of memory region.
-            memory_size (int): Size in bytes to download.
-            address_format (int): ALFID byte, upper nibble = address length in bytes,
-                                lower nibble = size length in bytes.
             data_format (int): Data format identifier (usually 0x00 for default).
+            addr_length_format (int): ALFID byte, upper nibble = address length in bytes,
+                                lower nibble = size length in bytes.
+            memory_addr (int): Starting address of memory region.
+            memory_size (int): Size in bytes to download.
             segment_name (str): Optional name for logging clarity.
         """
-
-        address_length = (address_format >> 4) & 0x0F
-        size_length = address_format & 0x0F
+        print("RequestDownload :")
+        data_ompress = (data_format >> 4) & 0x0F
+        if data_ompress == 0:
+            print("  => No Compression")
+        else:
+            print(f"  => Specific Compression : {data_ompress}")
+        
+        data_encrypt = data_format & 0x0F
+        if data_encrypt == 0:
+            print("  => No Ecryption\n")
+        else:
+            print(f"  => Specific Ecryption : {data_encrypt}\n")
+        
+        address_length = (addr_length_format >> 4) & 0x0F
+        size_length = addr_length_format & 0x0F
 
         if not (1 <= address_length <= 4 and 1 <= size_length <= 4):
             raise ValueError("Address and size format must be 1–4 bytes")
         
         # Cast the memory address according to the defined address_length
         delta_s = 4 - address_length
-        memory_address = memory_address >> (delta_s * 8)
-        # print("memory_address = ", hex(memory_address)) # For debug
+        memory_addr = memory_addr >> (delta_s * 8)
+        # print("memory_addr = ", hex(memory_addr)) # For debug
 
-        addr_bytes = memory_address.to_bytes(address_length, 'big')
+        addr_bytes = memory_addr.to_bytes(address_length, 'big')
         size_bytes = memory_size.to_bytes(size_length, 'big')
 
-        payload = list(bytes([0x34, data_format, address_format])) + list(addr_bytes) + list(size_bytes)
+        payload = list(bytes([0x34, data_format, addr_length_format])) + list(addr_bytes) + list(size_bytes)
 
         segment_info = f" for segment '{segment_name}'" if segment_name else ""
         logger.info(
             f"RequestDownload{segment_info}: "
-            f"Addr=0x{memory_address:X} (len={address_length}), "
+            f"Addr=0x{memory_addr:X} (len={address_length}), "
             f"Size=0x{memory_size:X} (len={size_length})"
         )
-        # payload = [0x34, 0x82, 0x11, 0x00, 0x00]
+
         respData = self.WriteReadRequest(payload)
         # print(respData) # For debug
-        return True
+
+        if(respData['status'] == False):
+            logger.error(f"RequestDownload failed: {respData['response']}")
+
+        return respData['status']
     
     def TransferData(self, block_number: int, data: bytes, address: int) -> bool:
         # """Transfer data block"""
@@ -860,11 +876,11 @@ class UDSInterface():
             if len(respData["response"]) >= 2 and \
             int(respData["response"][0], 16) == 0x76 and \
             int(respData["response"][1], 16) == block_number:
-                return True
+                return respData["status"]
             else:
                 logger.error(f"TransferData failed response: {respData['response']}")
                 exit()
-                return False
+                return respData["status"]
             
         except Exception as e:
             logger.error(f"TransferData error: {str(e)} {respData['response']}")
@@ -1010,8 +1026,6 @@ class UDSInterface():
             Error = str(retVal[2])
         # Return a tuple (status, error)
         return status, Error
-
-
 
     def getFrameFromId(self, canId, timeout=2):
         """
