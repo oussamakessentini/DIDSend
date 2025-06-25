@@ -12,10 +12,17 @@ from openpyxl.styles import PatternFill
 from openpyxl.formatting.rule import CellIsRule
 import subprocess
 import logging
-from typing import List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
+from pathlib import Path
 from Lib.Pdx_Odx import *
 
+
+# Configure logging
+# logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 Global_config_file = "Config.yml"
+
 
 def format_hex(item):
     if isinstance(item, int):
@@ -111,6 +118,93 @@ def load_config(obj_dest, globalVal, config_file, Encode=False):
         config = {}
     return config
 
+
+def get_nested_yaml_option(
+    file_path: Union[str, Path],
+    keys: Union[str, List[str]],
+    default: Any = None,
+    raise_on_missing: bool = False,
+    safe_mode: bool = True
+) -> Optional[Any]:
+    """
+    Retrieve a nested option value from a YAML file with support for multiple levels.
+
+    Args:
+        file_path: Path to the YAML file (string or Path object)
+        keys: Either a single key string (for top-level) or list of keys for nested access
+              (e.g., ['category', 'subcategory', 'option'])
+        default: Default value to return if option is not found
+        raise_on_missing: If True, raises KeyError when any key in the path is missing
+        safe_mode: If True, uses yaml.safe_load for security
+
+    Returns:
+        The requested value if found, otherwise the default value
+
+    Raises:
+        FileNotFoundError: If the YAML file doesn't exist
+        PermissionError: If file cannot be read
+        yaml.YAMLError: If the YAML file is malformed
+        KeyError: If raise_on_missing is True and any key in path is missing
+        TypeError: If keys argument is invalid
+    """
+    try:
+        # Validate and normalize input
+        if isinstance(keys, str):
+            keys = [keys]
+        elif not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
+            raise TypeError("keys must be a string or list of strings")
+
+        if not keys:
+            raise ValueError("keys list cannot be empty")
+
+        # Convert to Path object immediately
+        path = Path(file_path)
+
+        # Verify file exists and is readable
+        if not path.exists():
+            raise FileNotFoundError(f"YAML file not found: {path}")
+        if not path.is_file():
+            raise ValueError(f"Path is not a file: {path}")
+        if not os.access(path, os.R_OK):
+            raise PermissionError(f"Cannot read file: {path}")
+
+        # Load YAML content
+        with path.open('r', encoding='utf-8') as file:
+            try:
+                loader = yaml.safe_load if safe_mode else yaml.load
+                data = loader(file) or {}
+            except yaml.YAMLError as e:
+                logger.error(f"Error parsing YAML file {path}: {e}")
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error loading YAML: {e}")
+                raise
+
+        # Navigate through nested structure
+        current_level = data
+        for key in keys:
+            if not isinstance(current_level, dict):
+                if raise_on_missing:
+                    raise KeyError(f"Path segment '{key}' not found (reached non-dict level)")
+                logger.debug(f"Path segment '{key}' not found (reached non-dict level)")
+                return default
+
+            if key not in current_level:
+                if raise_on_missing:
+                    raise KeyError(f"Key '{key}' not found in path {keys[:keys.index(key)+1]}")
+                logger.debug(f"Key '{key}' not found, returning default")
+                return default
+
+            current_level = current_level[key]
+
+        return current_level
+
+    except Exception as e:
+        logger.error(f"Error retrieving YAML option: {e}")
+        if raise_on_missing:
+            raise
+        return default
+    
 def find_and_update_key(data, key, new_value):
     """
     Recursively search for a key in a nested dictionary and update its value.
@@ -132,7 +226,7 @@ def find_and_update_key(data, key, new_value):
 
 def update_config_value(config_file, key, new_value):
     """
-    Load the YAML file, update the given key wherever it is found, and save the changes.
+    Load the YAML file, update the given key wherever it is found, afnd save the changes.
     """
     try:
         yaml.preserve_quotes = True
@@ -441,7 +535,7 @@ def get_all_files_path(
         PermissionError: If access to the folder is denied.
     """
     # Set up logging
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger(__name__)
     
     file_paths = []
@@ -517,8 +611,24 @@ def extractPdxFileInfo(pdx_file):
     else:
         # Clear old PDX read data :
         print("[Warning] Read PDX => PDX file not found =>", pdx_file)
-    
-    # Delete the temporary folder
-    # shutil.rmtree(pdx_temp_path)
 
     return pdxfBinFile, odxfDataFile, pdxDict
+
+def swTypeDesc(data: str) -> str:
+    if('BOOT' in data):
+        return "Boot Software"
+    elif('CODE' in data):
+        return "Application Software"
+    elif('DATA' in data):
+        return "Calibration Software"
+    else:
+        return "Unkown Software"
+    
+def int_to_hexList(value:int = 0, byte_length:int = 4):
+    # Convert to bytes using only required number of bytes
+    int_byte_array = value.to_bytes(byte_length, byteorder='big')
+
+    # Convert each byte to 2-digit hex string
+    hexList = [f"{b:02X}" for b in int_byte_array]
+
+    return hexList

@@ -12,7 +12,7 @@ import binascii
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler('ecu_programming.log'),
@@ -74,6 +74,7 @@ class ECUProgrammer:
         self.security_level: int = progConfig.security_level
         self.key_algorithm: str = progConfig.key_algorithm
         self.block_number: int = 1
+        self.data_format: int = 0
         self.start_address: str = ''
         self.segment_size: int = 0
         self.data_offset: int = 0
@@ -109,6 +110,7 @@ class ECUProgrammer:
         try:
             for idx in range(0, len(data), self.block_size):
                 block = data[idx:idx + self.block_size]
+
                 # Check directflow => No address + No Ckecksum
                 if directFlow == True:
                     self.Uds.TransferData(self.block_number, block, 0)
@@ -131,7 +133,7 @@ class ECUProgrammer:
 
     def program_hex_file(self, hex_file_path: str) -> None:
         """Program Intel HEX file to ECU"""
-        logger.info(f"Starting programming process for {hex_file_path}")
+        logger.info(f"Starting programming process for {os.path.basename(hex_file_path)}")
         
         # try:
         # Load HEX file data
@@ -218,157 +220,236 @@ class ECUProgrammer:
         #     logger.error(f"Programming failed: {str(e)}")
         #     raise
 
-    def program_pdx_bin_file(self, bin_file_path: str, pdxInfo: dict) -> None:
+    def program_pdx_bin_file(self, bin_file_path: List[str], allPdxInfo: dict) -> None:
         """Program Bin file to ECU"""
-        logger.info(f"Starting programming process for {bin_file_path}")
-        
+
+        # CombinePdxProg = get_nested_yaml_option('Config_PR105.yml', ['Options', 'PDX_options', 'CombinePdxProg'], default=False)
+
         # try:
-        print("bin_file_path = ", bin_file_path)
+        # Check the PDX files and programmation method
+        if len(bin_file_path) > 1:            
+            print(f"Multi PDX binaries detected :")
+            logger.info(f"Starting programming process of the following PDX binary files :")
+            for file in bin_file_path:
+                print(f' - {os.path.basename(file)}')
+        else:
+            logger.info(f"Starting programming process of {os.path.basename(bin_file_path[0])}")
+            print(f"PDX binary detected => {os.path.basename(bin_file_path[0])}.")
 
-        with BinaryParser(bin_file_path, '<') as parser:
+        # Start Programming sequence
+        self.Uds.ReadDID('F02B')
 
-            self.Uds.ReadDID('F02B')
-            self.Uds.ReadDID('F01A')
+        # Enter extented session
+        self.Uds.StartSession(0x03)
 
-            self.Uds.StartReset(0x2)
+        # Start TesterPresent background thread
+        tp = TesterPresentThread(self.Uds, interval=0.5)
+        tp.start()
+
+        self.Uds.ReadDID('F01A')
+
+        self.Uds.StartReset(0x2)
+        
+        wait_ms(7000)
+
+        # Enter programming session
+        self.Uds.StartSession(0x02)
+
+        SA_OK = False
+        while (SA_OK == False):
+            # Request security access
+            SA_OK = self.Uds.SecurityAccess(self.security_level)
+            wait_ms(500)
+        
+        self.security_level = 2
+        # Manually provide a 32-bit (4-byte) key
+        key = bytes([0xFF, 0xFF, 0xFF, 0xFF])  # Replace with real OEM-calculated key
+
+        sc_result = self.Uds.SecurityAccess(self.security_level, key)
+        if(sc_result != True): raise UDSProgrammingError("SecurityAccess => Failed")
+
+        tp.pause()
+
+        pdxInfo = {}
+        dataBlock_TOB = {}
+        dataBlock_POB = {}
+
+        for idx, file in enumerate(bin_file_path):
+
+            pdxInfo = allPdxInfo[idx]
+            # print(pdxInfo)
+            print('')
+            # Write target fingerprint X -------------------------------------------------
+            logger.info(f"Software reference : {pdxInfo['DATA_BLOCKS'][0]['SW_REFERENCE']}")
+            logger.info(f" => Write target fingerprint")
+
+            cks_count = len(pdxInfo['CHECKSUMS'])
+            # print("Number of CHECKSUM IDs:", cks_count)
+
+            # Remove all non-hex characters except letters/numbers
+            checksum_hex_str = ''.join(re.findall(r'[A-Fa-f0-9]+', pdxInfo['CHECKSUMS'][cks_count-1]['CHECKSUM-RESULT']))
+
+            # Get TOB \ POB data
+            dataBlock_TOB[idx] = pdxInfo['DATA_BLOCKS'][0]['TOB']
+            dataBlock_POB[idx] = pdxInfo['DATA_BLOCKS'][0]['POB']
+            # print(dataBlock_TOB[idx], dataBlock_POB[idx])
+
+            retData = self.Uds.WriteDID('F01B',
+                                        str_to_hexList(dataBlock_TOB[idx]) +
+                                        str_to_hexList(dataBlock_POB[idx]) +
+                                        str_to_hexList(checksum_hex_str))
+            if(retData[1] != True): raise UDSProgrammingError(f"Write F01B => Failed => response {retData[2]}")
+            # ---------------------------------------------------------------------------
+            logger.info(f" => Number of segments : {len(pdxInfo['SEGMENTS'])}")
+
+            # Write target signature X ---------------------------------------------
+            logger.info(f" => Write target signature")
+            retData = self.Uds.WriteDID('F03C', str_to_hexList(dataBlock_TOB[idx]) + str_to_hexList(dataBlock_POB[idx]) + str_to_hexList('00'))
+            # print(retData)
             
-            wait_ms(7000)
+            # Write target CS_Version X --------------------------------------------
+            logger.info(f" => Write target CS_Version")
+            retData = self.Uds.WriteDID('F03B', str_to_hexList(dataBlock_TOB[idx]) + str_to_hexList(dataBlock_POB[idx]) + str_to_hexList('0000'))
+            # print(retData)
 
-            # Enter programming session
-            self.Uds.StartSession(0x02)
+        retData = []
+        seg_data = {}
+        isCompressed = False
 
-            # Start TesterPresent background thread
-            tp = TesterPresentThread(self.Uds, interval=0.5)
-            tp.start()
+        for idx, file in enumerate(bin_file_path):
+            print("\nCurrent PDX file =", os.path.basename(bin_file_path[idx]),'\n')
+            self.data_offset = 0
 
-            SA_OK = False
-            while (SA_OK == False):
-                # Request security access
-                SA_OK = self.Uds.SecurityAccess(self.security_level)
-                wait_ms(500)
-            
-            self.security_level = 2
-            # Manually provide a 32-bit (4-byte) key
-            key = bytes([0xFF, 0xFF, 0xFF, 0xFF])  # Replace with real OEM-calculated key
+            pdxInfo = allPdxInfo[idx]
 
-            if(self.Uds.SecurityAccess(self.security_level, key) == True):
-            
-                cks_count = len(pdxInfo['CHECKSUMS'])
-                # print("Number of CHECKSUM IDs:", cks_count)
+            # ----------------------------------------------------------------------------
+            retData = self.Uds.StartRC('0702', str_to_hexList(dataBlock_TOB[idx]) + str_to_hexList(dataBlock_POB[idx]), timeout=20)
+            if(retData[0] != 'OK'): raise UDSProgrammingError(f"StartRC('0708') => Failed => response {retData[2]}")
+            # print(retVal)
 
-                # Step 1: Remove all non-hex characters except letters/numbers
-                hex_string = ''.join(re.findall(r'[A-Fa-f0-9]+', pdxInfo['CHECKSUMS'][cks_count-1]['CHECKSUM-RESULT']['VALUE']))
+            for seg in pdxInfo['SEGMENTS']:
+                self.block_number = 1
+                # print(seg) # For Debug
 
-                # Step 2: Convert to bytes
-                retVal = self.Uds.WriteDID('F01B',
-                                           str_to_hexList(pdxInfo['TOB']) +
-                                           str_to_hexList(pdxInfo['POB']) +
-                                           str_to_hexList(hex_string))
+                if(seg['ENCRYPT-COMPRESS-METHOD'] != '00'):
+                    self.data_format = int(seg['ENCRYPT-COMPRESS-METHOD'], 16)
+                    isCompressed = True
 
-                if(retVal[1] == True):
-                    seg_count = len(pdxInfo['SEGMENTS'])
-                    print("Number of segments =", seg_count)
+                with BinaryParser(file, '<') as parser:
+                    # Get segment size
+                    if(isCompressed == True):
+                        self.segment_size = seg['COMPRESSED-SIZE']
+                        seg_data[seg['ID']] = parser._read_data(self.data_offset, seg['COMPRESSED-SIZE'])
+                    else:
+                        self.segment_size = seg['UNCOMPRESSED-SIZE']
+                        seg_data[seg['ID']] = parser._read_data(self.data_offset, seg['UNCOMPRESSED-SIZE'])
+                
+                print("Segment information :")
+                print(f" => Segment ID : {seg['ID']}")
+                print(f" => Segment Compressed : {isCompressed}")
+                print(f" => Segment start address : 0x{seg['SOURCE-START-ADDRESS']}")
+                print(f" => Segment size : {self.segment_size}")
 
-                    retVal = self.Uds.WriteDID('F03C', str_to_hexList(pdxInfo['TOB']) + str_to_hexList(pdxInfo['POB']) + str_to_hexList('00'))
-                    # print(retVal)
+                # Read segment start address
+                self.start_address = int(seg['SOURCE-START-ADDRESS'], 16)
+                # Convert int to bytes (using only required number of bytes) then each byte to 2-digit hex string
+                startAddr_hexList = int_to_hexList(self.start_address, 4)
 
-                    retVal = self.Uds.WriteDID('F03B', str_to_hexList(pdxInfo['TOB']) + str_to_hexList(pdxInfo['POB']) + str_to_hexList('0000'))
-                    # print(retVal)
+                # # Calculate minimum number of bytes needed
+                sizeAddr_nbytes = (self.segment_size.bit_length() + 7) // 8
 
-                    retVal = self.Uds.StartRC('0702', str_to_hexList(pdxInfo['TOB']) + str_to_hexList(pdxInfo['POB']), timeout=20)
-                    # print(retVal)
+                # Convert int to bytes (using only required number of bytes) then each byte to 2-digit hex string
+                sizeAddr_hexList = int_to_hexList(self.segment_size, sizeAddr_nbytes)
 
-                    tp.pause()
+                # For debug
+                # print("startAddr_hexList =", startAddr_hexList)
+                # print("sizeAddr_hexList  =", sizeAddr_hexList)
 
-                    seg_data = {}
-                    isCompressed = True # TODO
+                addr_length_fmt = (len(startAddr_hexList) << 4) | len(sizeAddr_hexList)
 
-                    # Iterate only over the values in key 'b'
-                    for seg in pdxInfo['SEGMENTS']:
-                        self.block_number = 1
-                        # print(seg) # For Debug
+                reqDL = self.Uds.RequestDownload(self.data_format,
+                                                 addr_len_format=addr_length_fmt,
+                                                 memory_addr=self.start_address,
+                                                 memory_size=self.segment_size,
+                                                 segment_name=seg['ID'],
+                                                 ALFID_reversed=True)
 
-                        # Read segment data
-                        # Convert to hex value
-                        self.start_address = int(seg['SOURCE-START-ADDRESS'], 16)
-                        # print(hex(self.start_address))
+                if reqDL == True:
+                    logger.info(f"Programming segment at 0x{self.start_address:08X} ({len(seg_data[seg['ID']])} bytes)")
+                    self.program_data(self.start_address, seg_data[seg['ID']], True)
 
-                        # Get segment size
-                        if(isCompressed == True):
-                            self.segment_size = seg['COMPRESSED-SIZE']
-                            seg_data[seg['ID']] = parser._read_data(self.data_offset, seg['COMPRESSED-SIZE'])
-                        else:
-                            self.segment_size = seg['UNCOMPRESSED-SIZE']
-                            seg_data[seg['ID']] = parser._read_data(self.data_offset, seg['UNCOMPRESSED-SIZE'])
+                    print(f"\nTransfert Exit => {seg['ID']}\n")
+                    self.Uds.RequestTransferExit()
 
-                        # print("Segment size = ", len(seg_data[seg['ID']]))
-
-                        reqDL = self.Uds.RequestDownload(data_format=0x10,
-                                                         addr_length_format=0x34,
-                                                         memory_addr=self.start_address,
-                                                         memory_size=seg['UNCOMPRESSED-SIZE'],
-                                                         segment_name=seg['ID'])
-
-                        if reqDL == True:
-                            logger.info(f"Programming segment at 0x{self.start_address:08X} ({len(seg_data[seg['ID']])} bytes)")
-                            self.program_data(self.start_address, seg_data[seg['ID']], True)
-                            print(f"\nTransfert Exit => {seg['ID']}\n")
-                            self.Uds.RequestTransferExit()
-                            # Update data offset value
-                            self.data_offset = self.data_offset + self.segment_size
-                        else:
-                            raise UDSProgrammingError("RequestDownload => failed")
-
-                    if not seg_data:
-                        raise UDSProgrammingError("No data found in HEX file")
-                    
-                    retData = []
-
-                    retData = self.Uds.StartRC('0708', str_to_hexList(pdxInfo['TOB']) +
-                                                       str_to_hexList(pdxInfo['POB']) , timeout=25)
-                    if(retData[0] != 'OK'): raise UDSProgrammingError("StartRC('0708') => Failed")
-
-                    retData = self.Uds.StartRC('0703', str_to_hexList('0000'), timeout=25)
-                    if(retData[0] != 'OK'): raise UDSProgrammingError("StartRC('0703') => Failed")
-
-                    retData = self.Uds.StartRC('0705', str_to_hexList('0000'), timeout=25)
-                    if(retData[0] != 'OK'): raise UDSProgrammingError("StartRC('0705') => Failed")
-
-                    retData = self.Uds.StartRC('0709', str_to_hexList('0000'), timeout=25)
-                    if(retData[0] != 'OK'): raise UDSProgrammingError("StartRC('0709') => Failed")
-
-                    retData = self.Uds.StartRC('0704', str_to_hexList(pdxInfo['TOB']) +
-                                                       str_to_hexList(pdxInfo['POB']) , timeout=25)
-                    if(retData[0] != 'OK'): raise UDSProgrammingError("StartRC('0704') => Failed")
-
-                    retData = self.Uds.StartRC('0706', str_to_hexList(pdxInfo['TOB']) +
-                                                       str_to_hexList(pdxInfo['POB']) , timeout=25)
-                    if(retData[0] != 'OK'): raise UDSProgrammingError("StartRC('0706') => Failed")
-
-                    retData = self.Uds.StartRC('070A', str_to_hexList(pdxInfo['TOB']) +
-                                                       str_to_hexList(pdxInfo['POB']) , timeout=25)
-                    if(retData[0] != 'OK'): raise UDSProgrammingError("StartRC('070A') => Failed")
-
-                    extra_data = pdxInfo['SW_REFERENCE'].replace('REF.', "") # ASCII => PBMS_XXXX
-                    print("PDX SW_REFERENCE = ", extra_data, '\n')
-
-                    retData = self.Uds.WriteDID('F01C',
-                                                str_to_hexList(pdxInfo['TOB']) +
-                                                str_to_hexList(pdxInfo['POB']) +
-                                                [len(extra_data)//2] +
-                                                str_to_hexList(extra_data + '30303030'))
-                    # print(retData)
-
-                    wait_ms(50)
-                        
-                    retData = self.Uds.StartReset(0x1)
-                    # print(retData)
-                        
-                    logger.info("Programming completed successfully")
-                    
+                    # Update data offset value
+                    self.data_offset = self.data_offset + self.segment_size
                 else:
-                    raise UDSProgrammingError("Write F01B => Failed")
-            
+                    raise UDSProgrammingError("RequestDownload => failed")
+                
+            retData = self.Uds.StartRC('0708', str_to_hexList(dataBlock_TOB[idx]) +
+                                                str_to_hexList(dataBlock_POB[idx]) , timeout=25)
+            if(retData[0] != 'OK'): raise UDSProgrammingError(f"StartRC('0708') => Failed => response {retData[2]}")
+            # ----------------------------------------------------------------------------
+
+        if not seg_data:
+            raise UDSProgrammingError("No data found in HEX binary file")
+        
+        retData = self.Uds.StartRC('0703', str_to_hexList('0000'), timeout=25)
+        if(retData[0] != 'OK'): raise UDSProgrammingError(f"StartRC('0703') => Failed => response {retData[2]}")
+
+        retData = self.Uds.StartRC('0705', str_to_hexList('0000'), timeout=25)
+        if(retData[0] != 'OK'): raise UDSProgrammingError(f"StartRC('0705') => Failed => response {retData[2]}")
+
+        retData = self.Uds.StartRC('0709', str_to_hexList('0000'), timeout=25)
+        if(retData[0] != 'OK'): raise UDSProgrammingError(f"StartRC('0709') => Failed => response {retData[2]}")
+    
+        for idx, file in enumerate(bin_file_path):
+
+            pdxInfo = allPdxInfo[idx]
+
+            extra_data = pdxInfo['DATA_BLOCKS'][0]['SW_REFERENCE'].replace('REF.', "") # ASCII => PBMS_XXXX
+
+            # Check integrity code in the executing flash memory X -----------------------
+            print('')
+            logger.info(f"Software reference : {extra_data}")
+            logger.info(f" => Check integrity code in the executing flash memory")
+
+            retData = self.Uds.StartRC('0704', str_to_hexList(dataBlock_TOB[idx]) +
+                                                str_to_hexList(dataBlock_POB[idx]) , timeout=25)
+            if(retData[0] != 'OK'): logger.error(f"ECU programming failed: StartRC('0704') => Failed => response {retData[2]}")
+
+            retData = self.Uds.StartRC('0706', str_to_hexList(dataBlock_TOB[idx]) +
+                                                str_to_hexList(dataBlock_POB[idx]) , timeout=25)
+            if(retData[0] != 'OK'): raise UDSProgrammingError(f"StartRC('0706') => Failed => response {retData[2]}")
+
+            retData = self.Uds.StartRC('070A', str_to_hexList(dataBlock_TOB[idx]) +
+                                                str_to_hexList(dataBlock_POB[idx]) , timeout=25)
+            if(retData[0] != 'OK'): raise UDSProgrammingError(f"StartRC('070A') => Failed => response {retData[2]}")
+            # ----------------------------------------------------------------------------
+
+            # Write traceability information X -------------------------------------------
+            logger.info(f" => Write traceability information")
+
+            # print("PDX SW_REFERENCE =", extra_data, '\n') # For debug
+        
+            retData = self.Uds.WriteDID('F01C',
+                                        str_to_hexList(dataBlock_TOB[idx]) +
+                                        str_to_hexList(dataBlock_POB[idx]) +
+                                        [len(extra_data)//2] +
+                                        str_to_hexList(extra_data + '30303030'))
+
+            if(retData[1] != True): raise UDSProgrammingError(f"WriteDID('F01C') => Failed => response {retData[2]}")
+            # ----------------------------------------------------------------------------
+
+        wait_ms(50)
+        
+        retData = self.Uds.StartReset(0x1)
+        # print(retData)
+        
+        print('')
+        logger.info("Programming completed successfully")
+        
+        
         # except Exception as e:
         #     logger.error(f"Programming failed: {str(e)}")
         #     raise

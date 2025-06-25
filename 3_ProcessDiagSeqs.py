@@ -1,3 +1,4 @@
+from collections import defaultdict
 from UDS.UDSInterface import *
 import pandas as pd
 from UDS.UDSProgram import *
@@ -228,15 +229,54 @@ if __name__ == "__main__":
         
         files_list = get_all_files_path(dir_name + "\\To_Program\\PDX\\", ['.pdx'])
         print(files_list)
-        for file in files_list:
+
+        DataBlockInfo = defaultdict(list)
+        pdx_bin_files = []
+        for idx, file in enumerate(files_list):
             pdxfBinFile, odxfDataFile, pdxDict = extractPdxFileInfo(file)
+            pdx_bin_files.append(pdxfBinFile)
+            DataBlockInfo[idx] = pdxDict
 
-            # Programmation Configuration
-            programmer = ECUProgrammer(Uds, UDSPdxProgConfig())
+        # General info
+        print("\nPDX General information :\n")
+        print(f"ODX-F Template = {pdxDict['ODXF_TEMPLATE']}")
+        print(f"Download type = {pdxDict['DOWNLOAD_TYPE']}")
+        print(f"ECU = {pdxDict['ECU']} [Type {pdxDict['ECU_TYPE']}]")
+        print("Expected idents :")
+        print(f"  Hardware = {pdxDict['HARDWARE']}")
+        print(f"  Boot Software = {pdxDict['BOOT_SOFTWARE']}")
+
+        print("")
+
+        for key, blockDict in DataBlockInfo.items():
+            # print("PDX File :", os.path.basename(file)) #TODO Fix PDX name
+            for idx in range (0, len(blockDict['DATA_BLOCKS'])):
+                # print(blockDict['DATA_BLOCKS'][idx])
+                print(f"Type and position : {swTypeDesc(blockDict['DATA_BLOCKS'][idx]['SW_REFERENCE'])} #{idx + 1}")
+                print("Reference : "
+                      f"{blockDict['DATA_BLOCKS'][idx]['SW_REFERENCE']} "
+                      f"{blockDict['DATA_BLOCKS'][idx]['SW_INDEX']} "
+                      f"{blockDict['DATA_BLOCKS'][idx]['SW_PRODUCT_ID']}")
+
+                if(idx < len(blockDict['CHECKSUMS'])):
+                    print(f"Fingerprint : {blockDict['CHECKSUMS'][idx]['CHECKSUM-RESULT']}")
+                else:
+                    print(f"Fingerprint : {blockDict['CHECKSUMS'][0]['CHECKSUM-RESULT']}")
+                
+                if(idx < len(blockDict['SECURITYS'])):
+                    print(f"Signature : {blockDict['SECURITYS'][idx]['FW-SIGNATURE']}")
+                else:
+                    print(f"Signature : {blockDict['SECURITYS'][0]['FW-SIGNATURE']}")
+
+                print(f"CS_Version : {blockDict['DATA_BLOCKS'][idx]['CS_VERSION']}")
             
-            # Program a Binary file
-            programmer.program_pdx_bin_file(pdxfBinFile, pdxDict)
+            print("")
 
+        # Programmation Configuration
+        programmer = ECUProgrammer(Uds, UDSPdxProgConfig())
+        
+        # Program a Binary file
+        programmer.program_pdx_bin_file(pdx_bin_files, DataBlockInfo)
 
         # Activate extented session before executing Excel file
         # Uds.StartSession(3)

@@ -15,7 +15,7 @@ class BinaryField:
 class BinaryParser:
     """Enhanced binary file parser with large file support"""
     
-    def __init__(self, file_path: str, byte_order: str = '<', buffer_size: int = 1024*1024):
+    def __init__(self, file_path: str, byte_order: str = '<', buffer_size: int = 1024*1024, verbose: bool = False):
         """
         Initialize parser with large file support
         :param file_path: Path to binary file
@@ -29,6 +29,7 @@ class BinaryParser:
         self._file: BinaryIO = None
         self._mmap = None
         self._file_size = 0
+        self._verbose = verbose
     
     def __enter__(self):
         self.open()
@@ -46,8 +47,9 @@ class BinaryParser:
             # Use memory mapping for files larger than 10MB
             if self._file_size > 10*1024*1024:
                 self._mmap = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
-            
-            print(f"Opened binary file ({self._file_size:,} bytes)")
+            if self._verbose:
+                print(f"Opened binary file ({self._file_size:,} bytes)")
+
         except Exception as e:
             print(f"Failed to open file: {str(e)}")
             raise
@@ -58,7 +60,9 @@ class BinaryParser:
             self._mmap.close()
         if self._file and not self._file.closed:
             self._file.close()
-        print("Closed binary file")
+        
+        if self._verbose:
+            print("Closed binary file")
     
     def _read_data(self, offset: int, size: int) -> bytes:
         """Read data from either mmap or file with bounds checking"""

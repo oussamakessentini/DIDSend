@@ -10,7 +10,7 @@ import threading
 
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('ULP_UDS_Programmer')
 
 class UDSInterface():
@@ -34,7 +34,7 @@ class UDSInterface():
         self.m_DLLFound = ''
         self.lock = threading.Lock()
 
-        # get the configuration from file
+        # Get the configuration from file
         if FileConfig != None:
             load_config(self, globals(), FileConfig)
         NoneData = []
@@ -418,6 +418,7 @@ class UDSInterface():
     def RcRequest(self, message, timeout=2):
         # Set the return structure values
         return_value = {"request" : [format_hex(item) for item in message], "response" : [],"status" : False}
+        # print(return_value["request"]) # For debug
         if self.comOk == False:
             print ("No Communication established")
             exit(0)
@@ -759,8 +760,10 @@ class UDSInterface():
             # Send key (even level)
             elif key is not None:
                 respData = self.WriteReadRequest([UDSService.SECURITY_ACCESS, level, 0xFF, 0xFF, 0xFF, 0xFF])
-                print(str(respData['response']))
+                # print(str(respData['response']))
+
                 self.security_level = level
+
                 if(respData['status'] == True):
                     logger.info("Security access granted")
                     return True
@@ -778,28 +781,29 @@ class UDSInterface():
     def RequestDownload(
         self,
         data_format: int = 0x00,
-        addr_length_format: int = 0x44,
+        addr_len_format: int = 0x44,
         memory_addr: int = 0x00,
         memory_size: int = 0x00,
-        segment_name: str = None
+        segment_name: str = None,
+        ALFID_reversed: bool = False
     ) -> bytes:
         """
         Sends a RequestDownload (SID 0x34) with configurable address and size formats.
 
         Parameters:
             data_format (int): Data format identifier (usually 0x00 for default).
-            addr_length_format (int): ALFID byte, upper nibble = address length in bytes,
+            addr_len_format (int): ALFID byte, upper nibble = address length in bytes,
                                 lower nibble = size length in bytes.
             memory_addr (int): Starting address of memory region.
             memory_size (int): Size in bytes to download.
             segment_name (str): Optional name for logging clarity.
         """
-        print("RequestDownload :")
-        data_ompress = (data_format >> 4) & 0x0F
-        if data_ompress == 0:
+        print("\nRequestDownload :")
+        data_compress = (data_format >> 4) & 0x0F
+        if data_compress == 0:
             print("  => No Compression")
         else:
-            print(f"  => Specific Compression : {data_ompress}")
+            print(f"  => Specific Compression : {data_compress}")
         
         data_encrypt = data_format & 0x0F
         if data_encrypt == 0:
@@ -807,21 +811,29 @@ class UDSInterface():
         else:
             print(f"  => Specific Ecryption : {data_encrypt}\n")
         
-        address_length = (addr_length_format >> 4) & 0x0F
-        size_length = addr_length_format & 0x0F
+        # Extract address and size length
+        address_length = (addr_len_format >> 4) & 0x0F
+        size_length = addr_len_format & 0x0F
 
-        if not (1 <= address_length <= 4 and 1 <= size_length <= 4):
-            raise ValueError("Address and size format must be 1–4 bytes")
+        # Check Vendor-Specific Deviation: Reversed ALFID
+        if ALFID_reversed:
+            addr_len_format = ((addr_len_format >> 4) | (addr_len_format << 4)) & 0xFF            
         
-        # Cast the memory address according to the defined address_length
-        delta_s = 4 - address_length
-        memory_addr = memory_addr >> (delta_s * 8)
-        # print("memory_addr = ", hex(memory_addr)) # For debug
+        # print(hex(addr_len_format)) # For debug
+            
+        if not (1 <= address_length <= 4 and 1 <= size_length <= 4):
+            raise ValueError("RequestDownload : Address and size format must be 1–4 bytes")
 
-        addr_bytes = memory_addr.to_bytes(address_length, 'big')
-        size_bytes = memory_size.to_bytes(size_length, 'big')
+        try:
+            addr_bytes = memory_addr.to_bytes(address_length, byteorder='big')
+            size_bytes = memory_size.to_bytes(size_length, byteorder='big')
+        
+        except Exception as e:
+            logger.error(f"RequestDownload error: {str(e)}")
+            exit()
 
-        payload = list(bytes([0x34, data_format, addr_length_format])) + list(addr_bytes) + list(size_bytes)
+        payload = list(bytes([0x34, data_format, addr_len_format])) + list(addr_bytes) + list(size_bytes)
+        # print([hex(0x34), hex(data_format), hex(addr_len_format)]) # For debug
 
         segment_info = f" for segment '{segment_name}'" if segment_name else ""
         logger.info(

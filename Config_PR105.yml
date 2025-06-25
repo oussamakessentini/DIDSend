@@ -1,9 +1,13 @@
-project: PR105
-DIDDataExcel: DIDData_PR105.xlsx
-DIDStatusExcel: DIDStatus_PR105.xlsx
-DiagSeqExcel: Diagnostic_sequences.xlsx
-PathToArxml: ../PR105/TBMU_MAIN/App/Tresos_TBMU_App/output/generated/output/ConfigFull.arxml
-PathToMergedArxml: MergedFiles.arxml
+Information:
+  project: PR105
+
+InputData:
+  DIDDataExcel: DIDData_PR105.xlsx
+  DIDStatusExcel: DIDStatus_PR105.xlsx
+  DiagSeqExcel: Diagnostic_sequences.xlsx
+  PathToArxml: ../PR105/TBMU_MAIN/App/Tresos_TBMU_App/output/generated/output/ConfigFull.arxml
+  PathToMergedArxml: MergedFiles.arxml
+
 CanConfig:
   TxId: 0x6B4
   RxId: 0x694
@@ -22,3 +26,9 @@ CanConfig:
     device: pcan_usb
     client_name: PythonClient
     net_name: Can_500k
+
+Options:
+  PDX_options:
+    PDX_Folder: To_Program/PDX/
+  ULP_Options:
+    ULP_Folder: To_Program/ULP/
