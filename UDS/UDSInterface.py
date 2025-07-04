@@ -352,20 +352,18 @@ class UDSInterface():
                         break
         return response
 
-    def WriteReadRequest(self, data, resp_req=True, timeout=2):
-        return_value = {"request" : [format_hex(item) for item in data], "response" : [],"status" : False}
-
+    def WriteReadRequest(self, message, resp_req=True, timeout=2, debug=True):
+        
+        return_value = {'request' : [], 'response' : [], 'status' : False}
+        msg = {}
+        
         if self.comOk == False:
             print ("No Communication established")
             exit(0)
         
         with self.lock:
             try:
-                self.__WriteUDSRequest(data, timeout)
-
-                # Response not required
-                if not resp_req:
-                    return None
+                self.__WriteUDSRequest(message, timeout)
                 
                 start_time = time.time()
                 while time.time() - start_time < timeout:
@@ -374,50 +372,55 @@ class UDSInterface():
 
                     if (msg['id'] == self.RxId):
 
-                        if (msg['data'][0] == 0x7F) and (msg['data'][1] == data[0]):
+                        # Response not required
+                        if not resp_req:
+                            return None
+                        
+                        if (msg['data'][0] == 0x7F) and (msg['data'][1] == message[0]):
                             error_code = msg['data'][2]
                             
                             if error_code != 0x78:
                                 raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
                             
-                        elif verifyFrame(msg['data'], data, min(msg['size'], len(data))):
+                        elif verifyFrame(msg['data'], message, min(msg['size'], len(message))):
                             if len(msg['data']) < msg['size']: 
                                 raise RuntimeError(f"Missing Data : Not all the expected {msg['size']} bytes data are received only {len(msg['data'])} bytes")
                             
-                            return_value["response"] = [format_hex(item) for item in msg['data']]
-                            return_value["status"] = True
+                            return_value['status'] = True
                             break
                         
                         elif (msg['data'][0] == 0x74):
-                            return_value["response"] = [format_hex(item) for item in msg['data']]
-                            return_value["status"] = True
+                            return_value['status'] = True
                             break
 
                         elif (msg['data'][0] == 0x76):
-                            return_value["response"] = [format_hex(item) for item in msg['data']]
-                            return_value["status"] = True
+                            return_value['status'] = True
                             break
 
                         elif (msg['data'][0] == 0x77):
-                            return_value["response"] = [format_hex(item) for item in msg['data']]
-                            return_value["status"] = True
+                            return_value['status'] = True
                             break
                         else:
                             print('WriteReadRequest Error : ', [format_hex(item) for item in msg['data']])
 
+                if debug == True:
+                    return_value['request']  = [format_hex(item) for item in message]
+                    return_value['response'] = [format_hex(item) for item in msg['data']]
                 
                 if time.time() - start_time > timeout:
                     raise TimeoutError(f"Time out No Response")
                 
             except Exception as e:
-                return_value["response"] = e
-                return_value["status"] = False
-        # print(return_value)
+                return_value['response'] = e
+                return_value['status'] = False
+        # print(return_value) # For debug
         return return_value
 
-    def RcRequest(self, message, timeout=2):
+    def RcRequest(self, message, timeout=2, debug=True):
         # Set the return structure values
-        return_value = {"request" : [format_hex(item) for item in message], "response" : [],"status" : False}
+        return_value = {'request' : [], 'response' : [], 'status' : False}
+        rc_msg = {}
+        
         # print(return_value["request"]) # For debug
         if self.comOk == False:
             print ("No Communication established")
@@ -432,41 +435,35 @@ class UDSInterface():
                     rc_msg = self.ReadMessages()
 
                     if (rc_msg is not None):
-                        if((rc_msg['id'] == self.RxId) and\
-                            (rc_msg['data'][1] == 0x71) and\
-                            (rc_msg['data'][3] == message[3]) and\
-                            (rc_msg['data'][4] == message[4])):
+                        if((rc_msg['id']      == self.RxId)  and\
+                           (rc_msg['data'][1] == 0x71)       and\
+                           (rc_msg['data'][3] == message[3]) and\
+                           (rc_msg['data'][4] == message[4])):
 
                             # Check RC type request
                             if(rc_msg['data'][2] == 0x1): # RC Start
-                                return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                                 return_value["status"] = True
                                 break
 
                             elif(rc_msg['data'][2] == 0x2): # RC Stop
-                                return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                                 return_value["status"] = True
                                 break
 
                             elif(rc_msg['data'][2] == 0x3): # RC Result
                                 if(rc_msg['data'][0] >= 5):
-                                    return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                                     return_value["status"] = True
                                     break
 
                                 elif(rc_msg['data'][0] == 4):
-                                    return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                                     return_value["status"] = True
                                     break
 
                                 else:
                                     # 'ResultRc Error : Uncorrect size'
-                                    return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                                     return_value["status"] = False
                                     break
                             else:
                                 # 'ResultRc Error : Undefined'
-                                return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                                 return_value["status"] = False
                                 break
 
@@ -478,15 +475,17 @@ class UDSInterface():
                                 continue
                             else:
                                 # return 'NOK', rc_msg['data'], ('ResultRc Error : ' + self.__get_uds_nrc_description(rc_msg['data'][3]))
-                                return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                                 return_value["status"] = False
                                 break
                         else:
-                            return_value["response"] = [format_hex(item) for item in rc_msg['data']]
                             return_value["status"] = False
                             break
                             # return 'NOK', rc_msg['data'], ('ResultRc Error : ', format_hex(rc_msg['data'][1]), format_hex(rc_msg['data'][2]), self.__get_uds_nrc_description(rc_msg['data'][3]))
-                        
+
+                if debug == True:
+                    return_value["request"]  = [format_hex(item) for item in message]
+                    return_value["response"] = [format_hex(item) for item in rc_msg['data']]
+
                 if time.time() - start_time > timeout:
                     raise TimeoutError(f"Time out No Response")
 
@@ -743,40 +742,70 @@ class UDSInterface():
 
     def SecurityAccess(self, level: int, key: Optional[bytes] = None) -> bool:
         """Perform security access (request seed or send key)"""
-        try:
-            # Request seed (odd level)
-            if level % 2 == 1:
-                respData = self.WriteReadRequest([UDSService.SECURITY_ACCESS, level])
-                if len(respData['response']) < 3:
-                    raise ValueError("Invalid seed response length")
-                
-                # seed = response[]  # Skip SID and subfunction
-                logger.info(f"Received seed: {respData['response']} => {respData['status']}")
-                # Here you would typically compute the key from the seed
-                # For this example, we'll just return True
-                self.security_level = level
-                return True
+        # try:
+        # Request seed (odd level)
+        if level % 2 == 1:
+            resp = self.WriteReadRequest([UDSService.SECURITY_ACCESS, level])
+            if len(resp['response']) < 3:
+                raise ValueError("Invalid seed response length")
             
-            # Send key (even level)
-            elif key is not None:
-                respData = self.WriteReadRequest([UDSService.SECURITY_ACCESS, level, 0xFF, 0xFF, 0xFF, 0xFF])
-                # print(str(respData['response']))
-
-                self.security_level = level
-
-                if(respData['status'] == True):
-                    logger.info("Security access granted")
-                    return True
-                else:
-                    logger.info("Security access failed")
-                    return False
-            
-            else:
-                raise ValueError("Key required for even security access levels")
+            # seed = response[]  # Skip SID and subfunction
+            logger.info(f"Received seed: {resp['response']} => {resp['status']}")
         
-        except Exception as e:
-            logger.error(f"Security access failed: {str(e)}")
-            return False
+        # Send key (even level)
+        elif key is not None:
+            resp = self.WriteReadRequest([UDSService.SECURITY_ACCESS, level] + list(key))
+            print(str(resp['response']))
+            logger.info(f"Received seed: {resp['response']} => {resp['status']}")
+
+            if(resp['status'] == True):
+                logger.info("Security access => Granted")
+            else:
+                logger.info("Security access => Failed")
+        
+        else:
+            raise ValueError("Key required for even security access levels")
+        
+        return resp
+        # except Exception as e:
+        #     logger.error(f"Security access failed: {str(e)}")
+        #     return False
+
+    def SecurityAccess_negociation(self, level_seed: int, level_key: int, timeout_ms=5000, sa_debug=False) -> bool:
+        """Perform security access (request seed or send key)"""
+        # try:
+        sc_result = {"request" : [], "response" : [],"status" : False}
+        wait_time:int = 0
+
+        while (sc_result['status'] == False) and (wait_time < timeout_ms):
+            # Request security access
+            sc_result = self.SecurityAccess(level_seed)
+            wait_time += 300
+            wait_ms(300)
+        
+        if (sa_debug == True):
+            if(wait_time >= timeout_ms): print(f"SecurityAccess level {level_seed} => Failed => Response : {sc_result['response']}")
+        else:
+            if(wait_time >= timeout_ms): raise TimeoutError(f"SecurityAccess level {level_seed} => Failed => Response : {sc_result['response']}")
+
+        # Here you would typically compute the key from the seed
+
+        # Force the debug key
+        if(sa_debug == True):
+            # Manually provide a 32-bit (4-byte) key
+            key = bytes([0xFF, 0xFF, 0xFF, 0xFF])  # Replace with real OEM-calculated key
+
+        sc_result = self.SecurityAccess(level_key, key)
+        
+        if(sc_result['status'] != True):
+            if (sa_debug == True):
+                print(f"SecurityAccess level {level_key} => Failed => Response : {sc_result['response']}")
+            else:
+                raise RuntimeError(f"SecurityAccess level {level_key} => Failed => Response : {sc_result['response']}")
+
+        # except Exception as e:
+        #     logger.error(f"Security access failed: {str(e)}")
+        #     pass
     
     def RequestDownload(
         self,
@@ -842,75 +871,68 @@ class UDSInterface():
             f"Size=0x{memory_size:X} (len={size_length})"
         )
 
-        respData = self.WriteReadRequest(payload)
-        # print(respData) # For debug
+        resp = self.WriteReadRequest(payload)
+        # print(resp) # For debug
 
-        if(respData['status'] == False):
-            logger.error(f"RequestDownload failed: {respData['response']}")
+        if(resp['status'] == False):
+            logger.error(f"RequestDownload failed: {resp['response']}")
 
-        return respData['status']
+        return resp['status']
     
     def TransferData(self, block_number: int, data: bytes, address: int) -> bool:
         # """Transfer data block"""
         try:
             if address > 0:
-                payload_1 = [0x36, block_number] + int_to_3bytes(address)
+                message = [0x36, block_number] + int_to_byteList(address, 3)
             
-                # payload_1.append(len(data))
-                # print("payload_1 = ", [format_hex(item) for item in payload_1])
-                # print("payload_1 = ", payload_1)
-                # print("payload_1 = ", bytearray(payload_1))
-
-                # print("Block H = ", data.hex())
-                # print("Block = ", data)
-                # print("Block len = ", len(data))
-                payload = bytearray(payload_1) + bytearray(data)
+                payload = bytearray(message) + bytearray(data)
                 # print("payload = ", payload.hex())
                 # print("payload len = ",len(payload))
                 
                 # Calculate Payload + Data Block CRC
                 payload_crc = crc16_x25(payload) # Calculate CRC for block data
                 payload_crc = ((payload_crc & 0xFF) << 8) | ((payload_crc >> 8) & 0xFF)
-                payload_crc = int_to_2bytes(payload_crc)
+                payload_crc = int_to_byteList(payload_crc, 2)
                 # print('block crc =', payload_crc)
 
                 # Add CRC to the payload
                 final_payload = payload + bytearray(payload_crc)
                 # print(final_payload.hex())
             else:
-                payload_1 = [0x36, block_number]
-                final_payload = bytearray(payload_1) + bytearray(data)
+                payload = [0x36, block_number]
+                final_payload = bytearray(payload) + bytearray(data)
             
-            respData = self.WriteReadRequest(list(final_payload))
-            # print(respData["response"]) # For debug
+            resp = self.WriteReadRequest(list(final_payload), resp_req=False)
+            # print(resp) # For debug
 
+            if resp is not None:
+                if resp['status'] == True:
+                    if len(resp['response']) >= 2 and \
+                        int(resp['response'][0], 16) == 0x76 and \
+                        int(resp['response'][1], 16) == block_number:
+                        return resp['status']
 
-            if len(respData["response"]) >= 2 and \
-            int(respData["response"][0], 16) == 0x76 and \
-            int(respData["response"][1], 16) == block_number:
-                return respData["status"]
-            else:
-                logger.error(f"TransferData failed response: {respData['response']}")
+                logger.error(f"TransferData failed response: {resp['response']}")
                 exit()
-                return respData["status"]
+            
+            return resp
             
         except Exception as e:
-            logger.error(f"TransferData error: {str(e)} {respData['response']}")
+            logger.error(f"TransferData error: {str(e)} {resp['response']}")
             exit()
-            return False
     
     def RequestTransferExit(self) -> bool:
         """Request transfer exit (finish download)"""
         try:
-            respData = self.WriteReadRequest([0x37])
-            # print(respData) # For debug
-            if respData["status"] == True:
+            resp = self.WriteReadRequest([0x37])
+            # print(resp) # For debug
+            if resp["status"] == True:
                 return True
             else:
-                logger.error(f"Request transfer exit failed: {respData['response']}")
+                logger.error(f"Request transfer exit failed: {resp['response']}")
                 return False
         except Exception as e:
-            logger.error(f"Request transfer exit failed: {str(e)} {respData['response']}")
+            logger.error(f"Request transfer exit failed: {str(e)} {resp['response']}")
             return False
 
     def StartSession(self, number):
@@ -923,9 +945,9 @@ class UDSInterface():
         data = []
         data.append(0x10)
         data.append(number)
-        respData = self.WriteReadRequest(data)
+        resp = self.WriteReadRequest(data)
 
-        if (respData["status"] == True):
+        if (resp["status"] == True):
             if(number == 1):
                 print (f"Default session activated...")
             elif(number == 2):
@@ -937,7 +959,7 @@ class UDSInterface():
             status = 'OK'
         else:
             status = 'NOK'
-            error = str(respData['response'])
+            error = str(resp['response'])
         return status, error
 
     def StartReset(self, rstReq):
@@ -950,13 +972,13 @@ class UDSInterface():
         data = []
         data.append(0x11)
         data.append(rstReq)
-        respData = self.WriteReadRequest(data)
+        resp = self.WriteReadRequest(data)
 
-        if (respData["status"] == True):
+        if (resp["status"] == True):
             status = 'OK'
         else:
             status = 'NOK'
-            error = str(respData['response'])
+            error = str(resp['response'])
 
         return status, error
 
@@ -1247,8 +1269,8 @@ class TesterPresentThread(ControllableThread):
 
     def on_tick(self):
         try:
-            respData = self.Uds.WriteReadRequest([UDSService.TESTER_PRESENT, 0x00])
-            logger.debug(f"Sent TesterPresent Request = {respData['request']} \ Response = {respData['response']}")
+            resp = self.Uds.WriteReadRequest([UDSService.TESTER_PRESENT, 0x00])
+            logger.debug(f"TesterPresent sent = {resp['status']}")
         except Exception as e:
             logger.warning(f"TesterPresent failed: {e}")
 
@@ -1257,4 +1279,3 @@ class TesterPresentThread(ControllableThread):
 
     def on_stop(self):
         print("[TesterPresent] Stopped")
-

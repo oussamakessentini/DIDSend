@@ -3,6 +3,7 @@ import logging
 from enum import Enum
 from dataclasses import dataclass, field
 from typing import Dict, Optional
+from collections import defaultdict
 from UDS.BinaryParser import *
 from UDS.UDSInterface import TesterPresentThread, UDSInterface
 from UDS.Utils import *
@@ -154,29 +155,21 @@ class ECUProgrammer:
         self.Uds.ReadDID('F0FE')
         
         tp.pause()
-        SA_OK = False
-        while (SA_OK == False):
-            # Request security access
-            SA_OK = self.Uds.SecurityAccess(self.security_level)
-            wait_ms(500)
+
+        self.Uds.SecurityAccess_negociation(1, 2 , sa_debug=True) 
+
+        print('')
+        self.Uds.StartRC('FF00', [0x82, 0xf0, 0x5a])
         
-        self.security_level = 2
-        # Manually provide a 32-bit (4-byte) key
-        key = bytes([0xFF, 0xFF, 0xFF, 0xFF])  # Replace with real OEM-calculated key
+        rc_ok = False
+        while (rc_ok == False):
+            # Request security access
+            status, resp, error = self.Uds.ResultRC('FF00')
 
-        if(self.Uds.SecurityAccess(self.security_level, key) == True):
-            print('')
-            self.Uds.StartRC('FF00', [0x82, 0xf0, 0x5a])
-            
-            rc_ok = False
-            while (rc_ok == False):
-                # Request security access
-                status, resp, error = self.Uds.ResultRC('FF00')
-
-                if(status == 'ROUTINE_FINISHED_OK'):
-                    rc_ok = True
-                else:
-                    wait_ms(500)
+            if(status == 'ROUTINE_FINISHED_OK'):
+                rc_ok = True
+            else:
+                wait_ms(500)
 
         reqDL = False
         # Program each segment
@@ -220,21 +213,63 @@ class ECUProgrammer:
         #     logger.error(f"Programming failed: {str(e)}")
         #     raise
 
-    def program_pdx_bin_file(self, bin_file_path: List[str], allPdxInfo: dict) -> None:
-        """Program Bin file to ECU"""
-
-        # CombinePdxProg = get_nested_yaml_option('Config_PR105.yml', ['Options', 'PDX_options', 'CombinePdxProg'], default=False)
+    def program_pdx_files(self, files_list: List[str]) -> None:
+        """Program PDX files to ECU"""
 
         # try:
+
+        DataBlockInfo = defaultdict(list)
+        pdx_bin_files = []
+
+        for idx, file in enumerate(files_list):
+            pdxfBinFile, odxfDataFile, pdxDict = extractPdxFileInfo(file)
+            pdx_bin_files.append(pdxfBinFile)
+            DataBlockInfo[idx] = pdxDict
+
+        # General info
+        print("\nPDX General information :\n")
+        print(f"ODX-F Template = {pdxDict['ODXF_TEMPLATE']}")
+        print(f"Download type = {pdxDict['DOWNLOAD_TYPE']}")
+        print(f"ECU = {pdxDict['ECU']} [Type {pdxDict['ECU_TYPE']}]")
+        print("Expected idents :")
+        print(f"  Hardware = {pdxDict['HARDWARE']}")
+        print(f"  Boot Software = {pdxDict['BOOT_SOFTWARE']}")
+
+        print("")
+
+        for key, blockDict in DataBlockInfo.items():
+            # print("PDX File :", os.path.basename(file)) #TODO Fix PDX name
+            for idx in range (0, len(blockDict['DATA_BLOCKS'])):
+                # print(blockDict['DATA_BLOCKS'][idx])
+                print(f"Type and position : {swTypeDesc(blockDict['DATA_BLOCKS'][idx]['SW_REFERENCE'])} #{idx + 1}")
+                print("Reference : "
+                      f"{blockDict['DATA_BLOCKS'][idx]['SW_REFERENCE']} "
+                      f"{blockDict['DATA_BLOCKS'][idx]['SW_INDEX']} "
+                      f"{blockDict['DATA_BLOCKS'][idx]['SW_PRODUCT_ID']}")
+
+                if(idx < len(blockDict['CHECKSUMS'])):
+                    print(f"Fingerprint : {blockDict['CHECKSUMS'][idx]['CHECKSUM-RESULT']}")
+                else:
+                    print(f"Fingerprint : {blockDict['CHECKSUMS'][0]['CHECKSUM-RESULT']}")
+                
+                if(idx < len(blockDict['SECURITYS'])):
+                    print(f"Signature : {blockDict['SECURITYS'][idx]['FW-SIGNATURE']}")
+                else:
+                    print(f"Signature : {blockDict['SECURITYS'][0]['FW-SIGNATURE']}")
+
+                print(f"CS_Version : {blockDict['DATA_BLOCKS'][idx]['CS_VERSION']}")
+            
+            print("")
+
         # Check the PDX files and programmation method
-        if len(bin_file_path) > 1:            
+        if len(pdx_bin_files) > 1:            
             print(f"Multi PDX binaries detected :")
             logger.info(f"Starting programming process of the following PDX binary files :")
-            for file in bin_file_path:
+            for file in pdx_bin_files:
                 print(f' - {os.path.basename(file)}')
         else:
-            logger.info(f"Starting programming process of {os.path.basename(bin_file_path[0])}")
-            print(f"PDX binary detected => {os.path.basename(bin_file_path[0])}.")
+            logger.info(f"Starting programming process of {os.path.basename(pdx_bin_files[0])}")
+            print(f"PDX binary detected => {os.path.basename(pdx_bin_files[0])}.")
 
         # Start Programming sequence
         self.Uds.ReadDID('F02B')
@@ -255,18 +290,7 @@ class ECUProgrammer:
         # Enter programming session
         self.Uds.StartSession(0x02)
 
-        SA_OK = False
-        while (SA_OK == False):
-            # Request security access
-            SA_OK = self.Uds.SecurityAccess(self.security_level)
-            wait_ms(500)
-        
-        self.security_level = 2
-        # Manually provide a 32-bit (4-byte) key
-        key = bytes([0xFF, 0xFF, 0xFF, 0xFF])  # Replace with real OEM-calculated key
-
-        sc_result = self.Uds.SecurityAccess(self.security_level, key)
-        if(sc_result != True): raise UDSProgrammingError("SecurityAccess => Failed")
+        self.Uds.SecurityAccess_negociation(1, 2 , sa_debug=True)
 
         tp.pause()
 
@@ -274,9 +298,9 @@ class ECUProgrammer:
         dataBlock_TOB = {}
         dataBlock_POB = {}
 
-        for idx, file in enumerate(bin_file_path):
+        for idx, file in enumerate(pdx_bin_files):
 
-            pdxInfo = allPdxInfo[idx]
+            pdxInfo = DataBlockInfo[idx]
             # print(pdxInfo)
             print('')
             # Write target fingerprint X -------------------------------------------------
@@ -316,11 +340,11 @@ class ECUProgrammer:
         seg_data = {}
         isCompressed = False
 
-        for idx, file in enumerate(bin_file_path):
-            print("\nCurrent PDX file =", os.path.basename(bin_file_path[idx]),'\n')
+        for idx, file in enumerate(pdx_bin_files):
+            print("\nCurrent PDX file =", os.path.basename(pdx_bin_files[idx]),'\n')
             self.data_offset = 0
 
-            pdxInfo = allPdxInfo[idx]
+            pdxInfo = DataBlockInfo[idx]
 
             # ----------------------------------------------------------------------------
             retData = self.Uds.StartRC('0702', str_to_hexList(dataBlock_TOB[idx]) + str_to_hexList(dataBlock_POB[idx]), timeout=20)
@@ -353,13 +377,13 @@ class ECUProgrammer:
                 # Read segment start address
                 self.start_address = int(seg['SOURCE-START-ADDRESS'], 16)
                 # Convert int to bytes (using only required number of bytes) then each byte to 2-digit hex string
-                startAddr_hexList = int_to_hexList(self.start_address, 4)
+                startAddr_hexList = int_to_byteList(self.start_address, 4)
 
                 # # Calculate minimum number of bytes needed
                 sizeAddr_nbytes = (self.segment_size.bit_length() + 7) // 8
 
                 # Convert int to bytes (using only required number of bytes) then each byte to 2-digit hex string
-                sizeAddr_hexList = int_to_hexList(self.segment_size, sizeAddr_nbytes)
+                sizeAddr_hexList = int_to_byteList(self.segment_size, sizeAddr_nbytes)
 
                 # For debug
                 # print("startAddr_hexList =", startAddr_hexList)
@@ -403,9 +427,9 @@ class ECUProgrammer:
         retData = self.Uds.StartRC('0709', str_to_hexList('0000'), timeout=25)
         if(retData[0] != 'OK'): raise UDSProgrammingError(f"StartRC('0709') => Failed => response {retData[2]}")
     
-        for idx, file in enumerate(bin_file_path):
+        for idx, file in enumerate(pdx_bin_files):
 
-            pdxInfo = allPdxInfo[idx]
+            pdxInfo = DataBlockInfo[idx]
 
             extra_data = pdxInfo['DATA_BLOCKS'][0]['SW_REFERENCE'].replace('REF.', "") # ASCII => PBMS_XXXX
 
@@ -440,6 +464,10 @@ class ECUProgrammer:
 
             if(retData[1] != True): raise UDSProgrammingError(f"WriteDID('F01C') => Failed => response {retData[2]}")
             # ----------------------------------------------------------------------------
+
+            # Clean the PDX program temporary folders
+            if os.path.exists(os.path.dirname(file)):
+                shutil.rmtree(os.path.dirname(file))
 
         wait_ms(50)
         

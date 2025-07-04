@@ -26,9 +26,12 @@ Global_config_file = "Config.yml"
 
 def format_hex(item):
     if isinstance(item, int):
-        return f"0x{item:02X}"
+        return f"{item:02X}"
     elif isinstance(item, (bytes, bytearray)) and len(item) == 1:
-        return f"0x{item[0]:02X}"
+        return f"{item[0]:02X}"
+    elif len(item) > 1:
+        print("Wrong data format passed to format_hex() function")
+        return list(item)
     else:
         raise ValueError(f"Cannot format item: {item}")
 
@@ -335,22 +338,9 @@ def arxml_to_dict_xmltodict(file_path):
     with open(file_path, "r", encoding="utf-8") as file:
         return xmltodict.parse(file.read())
 
-
 def wait_ms(ms: int):
     """Wait for the given duration in milliseconds without blocking other threads."""
     time.sleep(ms / 1000.0)
-
-# Convert int value into bytes + truncate the value to lower 24 bits (3 bytes)
-def int_to_3bytes(value: int) -> List[str]:
-    value = value & 0xFFFFFF
-    byte_seq = value.to_bytes(3, byteorder='big')
-    return list(byte_seq)
-
-# Convert int value into bytes + truncate the value to lower 16 bits (2 bytes)
-def int_to_2bytes(value: int) -> List[str]:
-    value = value & 0xFFFF
-    byte_seq = value.to_bytes(2, byteorder='big')
-    return list(byte_seq)
 
 # Checksum CRC-16-CCITT (Polynomial 0x1021)
 def crc16_ccitt(data):
@@ -624,11 +614,10 @@ def swTypeDesc(data: str) -> str:
     else:
         return "Unkown Software"
     
-def int_to_hexList(value:int = 0, byte_length:int = 4):
+def int_to_byteList(value:int = 0, byte_length:int = 4):
     # Convert to bytes using only required number of bytes
     int_byte_array = value.to_bytes(byte_length, byteorder='big')
 
-    # Convert each byte to 2-digit hex string
-    hexList = [f"{b:02X}" for b in int_byte_array]
+    byteList = list(int_byte_array)
 
-    return hexList
+    return byteList

@@ -29,6 +29,6 @@ CanConfig:
 
 Options:
   PDX_options:
-    PDX_Folder: To_Program/PDX/
+    PDX_Folder: /To_Program/PDX/
   ULP_Options:
-    ULP_Folder: To_Program/ULP/
+    ULP_Folder: /To_Program/ULP/
