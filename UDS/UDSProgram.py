@@ -106,9 +106,10 @@ class ECUProgrammer:
 
         return data
     
-    def program_data(self, address: int, data: bytes, directFlow: bool = False) -> None:
+    def program_data(self, address: int, data: bytes, directFlow=False) -> None:
         """Program data to ECU memory"""
         try:
+            # print(self.block_size, hex(self.block_size))
             for idx in range(0, len(data), self.block_size):
                 block = data[idx:idx + self.block_size]
 
@@ -116,7 +117,9 @@ class ECUProgrammer:
                 if directFlow == True:
                     self.Uds.TransferData(self.block_number, block, 0)
                 else:
-                    self.Uds.TransferData(self.block_number, block, address)
+                    self.Uds.TransferData(self.block_number, block, address, True)
+                    # Update address offset
+                    address = address + self.block_size
 
                 # Check block number overflow
                 if self.block_number < 0xFF:
@@ -132,82 +135,105 @@ class ECUProgrammer:
             logger.error(f"Programming failed: {str(e)}")
             raise
 
-    def program_hex_file(self, hex_file_path: str) -> None:
+    def program_ulp_files(self, files_list: List[str]) -> None:
         """Program Intel HEX file to ECU"""
-        logger.info(f"Starting programming process for {os.path.basename(hex_file_path)}")
         
         # try:
-        # Load HEX file data
-        firmware_data = self.load_hex_file(hex_file_path)
-        
-        if not firmware_data:
-            raise UDSProgrammingError("No data found in HEX file")
+        output_file = ""
+        current_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        hex_file = ''
+        self.block_size = 243
 
-        # Enter programming session
-        # self.change_session(0x02)
-        self.Uds.StartSession(0x02)
+        for idx, file in enumerate(files_list):
 
-        # Start TesterPresent background thread
-        tp = TesterPresentThread(self.Uds, interval=0.5)
-        tp.start()
-        
-        self.Uds.ReadDID('F080')
-        self.Uds.ReadDID('F0FE')
-        
-        tp.pause()
+            hex_file = remove_extension(file) + '.hex'
 
-        self.Uds.SecurityAccess_negociation(1, 2 , sa_debug=True) 
+            run_srec_cat(
+                srec_cat_path = current_path + "\\Tools\\srecord-1.65.0-win64\\bin\\srec_cat.exe",
+                input_files = [(file, "Motorola")],
+                output_file = hex_file,
+                output_format = "Intel"
+            )
 
-        print('')
-        self.Uds.StartRC('FF00', [0x82, 0xf0, 0x5a])
-        
-        rc_ok = False
-        while (rc_ok == False):
-            # Request security access
-            status, resp, error = self.Uds.ResultRC('FF00')
+            logger.info(f"Starting programming process for {os.path.basename(file)}")
 
-            if(status == 'ROUTINE_FINISHED_OK'):
-                rc_ok = True
-            else:
-                wait_ms(500)
+            # Load HEX file data
+            firmware_data = self.load_hex_file(hex_file)
+            
+            if not firmware_data:
+                raise UDSProgrammingError("No data found in HEX file")
 
-        reqDL = False
-        # Program each segment
-        for address, data in firmware_data.items():
-            if(address >= 0x4000): # Skip the first segment
-                if reqDL == False:
-                    reqDL = self.Uds.RequestDownload(address, len(data))
-                if reqDL == True:
-                    data_bytes = bytes(data)
-                    logger.info(f"Programming segment at 0x{address:08X} ({len(data_bytes)} bytes)")
-                    self.program_data(address, data_bytes)
-        
-        self.Uds.RequestTransferExit()
+            # Enter programming session
+            # self.change_session(0x02)
+            self.Uds.StartSession(0x02)
 
-        self.Uds.StartRC('FF04')
-        
-        rc_ok = False
-        while (rc_ok == False):
-            wait_ms(100)            
-            status, resp, error = self.Uds.ResultRC('FF04')
-            print('status = ', status)
-            if(status == 'ROUTINE_FINISHED_OK'):
-                rc_ok = True
+            # Start TesterPresent background thread
+            tp = TesterPresentThread(self.Uds, interval=0.5)
+            tp.start()
+            
+            self.Uds.ReadDID('F080')
+            self.Uds.ReadDID('F0FE')
+            
+            tp.pause()
+
+            self.Uds.SecurityAccess_negociation(1, 2 , sa_debug=True) 
+
             print('')
-        
-        wait_ms(50)
+            self.Uds.StartRC('FF00', [0x82, 0xf0, 0x5a])
+            
+            rc_ok = False
+            while (rc_ok == False):
+                # Request security access
+                status, resp, error = self.Uds.ResultRC('FF00')
 
-        reqDL = self.Uds.WriteReadRequest([0x34, 0x83, 0x11, 0x00, 0x00])
-        if reqDL == True:
-            payload = [0x36, 0x01, 0xff, 0xff, 0x00, 0x00, 0x13, 0x09, 0x15, 0x11, 0x22, 0x09, 0x01, 0x00, 0x00, 0x24, 0x05, 0x25, 0xfe, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x5c, 0xe3, 0x6e, 0x50, 0xad]
-            respData = self.Uds.WriteReadRequest(payload)
-            if respData["status"] == False: raise UDSProgrammingError("No data found in HEX file")
+                if(status == 'ROUTINE_FINISHED_OK'):
+                    rc_ok = True
+                else:
+                    wait_ms(300)
+            
+            reqDL = False
+            self.block_number = 1
+            # Program each segment
+            for address, data in firmware_data.items():
+                if reqDL == False:
+                    reqDL = self.Uds.RequestDownload(data_format=0x82,
+                                                    addr_len_format=0x11,
+                                                    memory_addr=0x00,
+                                                    memory_size=0x00)
+                if reqDL == True:
+                    if address > 0:
+                        data_bytes = bytes(data)
+                        logger.info(f"Programming segment at 0x{address:08X} ({len(data_bytes)} bytes)")
+                        self.program_data(address, data_bytes)
+            
+            self.Uds.RequestTransferExit()
 
-        wait_ms(50)
-        
-        self.Uds.StartSession(1)
-        
-        logger.info("Programming completed successfully")
+            self.Uds.StartRC('FF04')
+            
+            rc_ok = False
+            while (rc_ok == False):          
+                status, resp, error = self.Uds.ResultRC('FF04')
+                if(status == 'ROUTINE_FINISHED_OK'):
+                    rc_ok = True
+                else:
+                    wait_ms(300)
+
+            reqDL = self.Uds.RequestDownload(data_format=0x83,
+                                            addr_len_format=0x11,
+                                            memory_addr=0x00,
+                                            memory_size=0x00)
+            if reqDL == True:
+                payload = [0x36, 0x01, 0xff, 0xff, 0x00, 0x00, 0x13, 0x09, 0x15, 0x11, 0x22, 0x09, 0x01, 0x00, 0x00, 0x24, 0x05, 0x25, 0xfe, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x5c, 0xe3, 0x6e, 0x50, 0xad]
+                respData = self.Uds.WriteReadRequest(payload)
+                if respData['status'] == False: raise UDSProgrammingError("No data found in HEX file")
+
+            wait_ms(50)
+            
+            self.Uds.StartSession(1)
+            
+            logger.info(f"{os.path.basename(file)} => Programmed successfully")
+
+            wait_ms(7000)
             
         # except Exception as e:
         #     logger.error(f"Programming failed: {str(e)}")
@@ -262,7 +288,7 @@ class ECUProgrammer:
             print("")
 
         # Check the PDX files and programmation method
-        if len(pdx_bin_files) > 1:            
+        if len(pdx_bin_files) > 1:
             print(f"Multi PDX binaries detected :")
             logger.info(f"Starting programming process of the following PDX binary files :")
             for file in pdx_bin_files:
@@ -379,8 +405,8 @@ class ECUProgrammer:
                 # Convert int to bytes (using only required number of bytes) then each byte to 2-digit hex string
                 startAddr_hexList = int_to_byteList(self.start_address, 4)
 
-                # # Calculate minimum number of bytes needed
-                sizeAddr_nbytes = (self.segment_size.bit_length() + 7) // 8
+                # Calculate minimum number of bytes needed
+                sizeAddr_nbytes = max(1, (self.segment_size.bit_length() + 7) // 8)
 
                 # Convert int to bytes (using only required number of bytes) then each byte to 2-digit hex string
                 sizeAddr_hexList = int_to_byteList(self.segment_size, sizeAddr_nbytes)

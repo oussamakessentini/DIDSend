@@ -232,33 +232,20 @@ if __name__ == "__main__":
         # Programmation Configuration
         programmer = ECUProgrammer(Uds, UDSPdxProgConfig())
 
-        files_list = get_all_files_path(dir_name + PDX_Folder, ['.pdx'])
+        # files_list = get_all_files_path(dir_name + PDX_Folder, ['.pdx'])
         
-        # Program PDX files
-        programmer.program_pdx_files(files_list)
+        # # Program PDX files
+        # programmer.program_pdx_files(files_list)
 
         # --------------------------------------------------
         # Programmation sequence :
         # --------------------------------------------------
 
-        # files_list = get_all_files_path(dir_name + ULP_Folder, ['.ulp'])
-        # print(files_list)
-
-        # output_file = ""
-
-        # for idx, file in enumerate(files_list):
-        #     run_srec_cat(
-        #         srec_cat_path = dir_name + "\\Tools\\srecord-1.65.0-win64\\bin\\srec_cat.exe",
-        #         input_files = [(file, "Motorola")],
-        #         output_file = remove_extension(file) + f'_{idx + 1}.hex',
-        #         output_format = "Intel"
-        #     )
-
-        # # Programmation Configuration
-        # programmer = ECUProgrammer(Uds, UDSPdxProgConfig())
+        files_list = get_all_files_path(dir_name + ULP_Folder, ['.ulp'])
+        print(files_list)
         
-        # # Program a HEX file
-        # programmer.program_hex_file(output_file)
+        # Program ULP files
+        programmer.program_ulp_files(files_list)
 
 
     elif(project == 'PR128'):

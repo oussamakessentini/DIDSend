@@ -25,13 +25,16 @@ Global_config_file = "Config.yml"
 
 
 def format_hex(item):
-    if isinstance(item, int):
-        return f"{item:02X}"
-    elif isinstance(item, (bytes, bytearray)) and len(item) == 1:
-        return f"{item[0]:02X}"
-    elif len(item) > 1:
-        print("Wrong data format passed to format_hex() function")
-        return list(item)
+    # print(item, type(item))
+    if isinstance(item, (int, bytes)):
+        # print("format_hex => Debug")
+        return f"{hex(item)}"
+    elif isinstance(item, bytearray):
+        if len(item) == 1:
+            # return f"{item[0]:02X}"
+        # else:
+            print("Wrong data format passed to format_hex() function")
+            # return list(item!)
     else:
         raise ValueError(f"Cannot format item: {item}")
 
@@ -44,7 +47,7 @@ def is_hex(s):
     
 def is_int(s):
     try:
-        int(s)  # Try converting to an integer with base 16
+        int(s)  # Try integer conversion
         return True
     except ValueError:
         return False
@@ -615,6 +618,13 @@ def swTypeDesc(data: str) -> str:
         return "Unkown Software"
     
 def int_to_byteList(value:int = 0, byte_length:int = 4):
+    # Calculate minimum number of bytes needed
+    nbytes = (value.bit_length() + 7) // 8
+
+    # Cast if superior to the input
+    if(nbytes > byte_length):
+        value = value & (0xFFFFFFFF >> ((nbytes - byte_length) * 8))
+    
     # Convert to bytes using only required number of bytes
     int_byte_array = value.to_bytes(byte_length, byteorder='big')
 
