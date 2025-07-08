@@ -106,7 +106,7 @@ class ECUProgrammer:
 
         return data
     
-    def program_data(self, address: int, data: bytes, directFlow=False) -> None:
+    def program_data(self, address: int, data: bytes, directFlow: bool = False) -> None:
         """Program data to ECU memory"""
         try:
             # print(self.block_size, hex(self.block_size))

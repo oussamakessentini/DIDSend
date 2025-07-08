@@ -1,7 +1,6 @@
 from collections import defaultdict
 from UDS.UDSInterface import *
 import pandas as pd
-from UDS.UDSProgram import *
 from UDS.Utils import *
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
@@ -74,7 +73,7 @@ def __execDiagCmd(Uds, index, line):
     
     return status, data, error
 
-    
+
 def processDiagSeqs(Uds):
     loop_nb = 0
     loop_start_idx = 0
@@ -147,79 +146,6 @@ def processDiagSeqs(Uds):
     print("\nDiagnostic sequences processing => Done \n")
 
 
-def processProgSeqs(Uds):
-    loop_nb = 0
-    loop_start_idx = 0
-    max_loop = 1
-    status = ''
-    data   = ''
-    error  = ''
-
-    # Read all sheets into a dictionary
-    excel_data: dict[str, pd.DataFrame] = pd.read_excel(DiagSeqExcel, sheet_name=None, dtype=str, na_values=[], keep_default_na=False)
-
-    # Iterate through all sheets
-    for sheet_name, df in excel_data.items():
-        # Check Sheet name is starting with "DIAG_SEQ"
-        if(sheet_name.startswith("PROG_SEQ")):
-            print(f"Processing {sheet_name}...")
-            
-            while loop_nb < max_loop:
-
-                # Loop over the sheet "DID Read" line by line from a specific index
-                for index, line in df.iloc[loop_start_idx:].iterrows():
-                    # Clear data for the next command
-                    status = ''
-                    data   = ''
-                    error  = ''
-
-                    if(line['Command'] == 'LOOP_START'):
-                        max_loop = int(line['Data'])
-                        loop_start_idx = index + 1
-                        loop_nb = 0
-
-                    elif(line['Command'] == 'LOOP_END'):
-                        loop_nb += 1
-                        if(loop_nb < max_loop):
-                            # break the loop for a new re-run
-                            break
-                        else:
-                            # End the loop and continue
-                            continue
-                    else:
-                        status, data, error = __execDiagCmd(Uds, index, line)
-                    
-                    if((data is not None) and (data != '')):
-                        df.at[index, 'Data'] = data
-
-                    # Update the line with the results
-                    df.at[index, 'Status'] = status
-                    df.at[index, 'Error']  = error
-
-
-                    # Detect latest command in the Excel sheet
-                    if(index >= df.index.max()):
-                        loop_nb += 1
-            
-            # Clear loop data
-            loop_nb = 0
-            loop_start_idx = 0
-            max_loop = 1
-
-            # Save all modified sheets back to the same or a new Excel file
-            with pd.ExcelWriter(DiagSeqExcel, engine='openpyxl') as writer:
-                for sheet_name, df in excel_data.items():
-                    df.to_excel(writer, sheet_name=sheet_name, index=False)
-
-            # Set the colors of the painter format with rules
-            applyPainterFormat(DiagSeqExcel, 'E')
-
-            # print(f"{DiagSeqExcel} updated successfully")
-        else:
-            continue # Excel sheet name not correct
-    print("\nDiagnostic sequences processing => Done \n")
-
-
 if __name__ == "__main__":
 
     dir_name = os.path.dirname(os.path.abspath(__file__))
@@ -229,24 +155,11 @@ if __name__ == "__main__":
     if(project == 'PR105'):
         Uds = UDSInterface(FileConfig=FileConfig)
 
-        # Programmation Configuration
-        programmer = ECUProgrammer(Uds, UDSPdxProgConfig())
+        # Activate extented session before executing Excel file
+        Uds.StartSession(3)
 
-        # files_list = get_all_files_path(dir_name + PDX_Folder, ['.pdx'])
-        
-        # # Program PDX files
-        # programmer.program_pdx_files(files_list)
-
-        # --------------------------------------------------
-        # Programmation sequence :
-        # --------------------------------------------------
-
-        files_list = get_all_files_path(dir_name + ULP_Folder, ['.ulp'])
-        print(files_list)
-        
-        # Program ULP files
-        programmer.program_ulp_files(files_list)
-
+        # Execute all the diagnostic sequences
+        processDiagSeqs(Uds)
 
     elif(project == 'PR128'):
         Uds = UDSInterface(FileConfig=FileConfig)
@@ -255,7 +168,7 @@ if __name__ == "__main__":
         Uds.StartSession(3)
 
         # Execute all the diagnostic sequences
-        # processDiagSeqs(Uds)
+        processDiagSeqs(Uds)
 
     else:
         print('Please add your project configuration')
