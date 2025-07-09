@@ -380,11 +380,11 @@ class UDSInterface():
                             error_code = msg['data'][2]
                             
                             if error_code != 0x78:
-                                raise RuntimeError(f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
+                                return_value['response'] = (f"Negative response: Error code 0x{error_code:02X}: " + self.__get_uds_nrc_description(error_code))
                             
                         elif verifyFrame(msg['data'], message, min(msg['size'], len(message))):
                             if len(msg['data']) < msg['size']: 
-                                raise RuntimeError(f"Missing Data : Not all the expected {msg['size']} bytes data are received only {len(msg['data'])} bytes")
+                                return_value['response'] = (f"Missing Data : Not all the expected {msg['size']} bytes data are received only {len(msg['data'])} bytes")
                             
                             return_value['status'] = True
                             break
@@ -408,11 +408,10 @@ class UDSInterface():
                     return_value['response'] = [format_hex(item) for item in msg['data']]
                 
                 if time.time() - start_time > timeout:
-                    raise TimeoutError(f"Time out No Response")
+                    return_value['response'] = (f"Time out No Response")
                 
             except Exception as e:
                 return_value['response'] = e
-                return_value['status'] = False
         # print(return_value) # For debug
         return return_value
 
@@ -751,7 +750,8 @@ class UDSInterface():
         # Request seed (odd level)
         if level % 2 == 1:
             resp = self.WriteReadRequest([UDSService.SECURITY_ACCESS, level])
-            if len(resp['response']) < 3:
+
+            if (resp['status'] == True) and (len(resp['response']) < 3):
                 raise ValueError("Invalid seed response length")
             
             # seed = response[]  # Skip SID and subfunction
@@ -760,7 +760,7 @@ class UDSInterface():
         # Send key (even level)
         elif key is not None:
             resp = self.WriteReadRequest([UDSService.SECURITY_ACCESS, level] + list(key))
-            print(str(resp['response']))
+
             logger.info(f"Received seed: {resp['response']} => {resp['status']}")
 
             if(resp['status'] == True):
