@@ -90,7 +90,7 @@ def str_to_hexList(strData, symbol=''):
             return False
         
     if len(strData) > 1:
-        if(symbol != ''):
+        if(symbol.strip() != ''):
             for group in strData.split(symbol):
                 if group:
                     data.extend([int(x, 16) for x in group.split() if x])
@@ -102,7 +102,11 @@ def str_to_hexList(strData, symbol=''):
                 # Treat as regular string and convert each character to its ASCII value
                 data = [ord(intData) for intData in strData]
     else:
-        data = [int(strData)]
+        if(strData.strip().isdigit()):
+            data = [int(strData)]
+        else:
+            if(strData.strip() != ''):
+                print(f"str_to_hexList => Input data error : {strData.strip()}")
     return data
 
 def load_config(obj_dest, globalVal, config_file, Encode=False):

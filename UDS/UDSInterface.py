@@ -1045,7 +1045,10 @@ class UDSInterface():
 
     def Pcan_StartRC(self, rcdid, dataraw=None):
         # Clean raw data
-        data = str_to_hexList(dataraw, ';')
+        if dataraw is not None:
+            data = str_to_hexList(dataraw, ';')
+        else:
+            data = str_to_hexList(dataraw, '')
 
         # Process diagnostic request
         return self.StartRC(rcdid, data)
