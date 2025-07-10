@@ -744,7 +744,7 @@ class UDSInterface():
         except Exception as e:
             return [f"ClearDTC Exception : ", False, e]
 
-    def SecurityAccess(self, level: int, key: Optional[bytes] = None) -> bool:
+    def SecurityAccess(self, level: int, key: Optional[bytes] = None, timeout_sa:int = 2) -> bool:
         """Perform security access (request seed or send key)"""
         # try:
         # Request seed (odd level)
@@ -759,9 +759,9 @@ class UDSInterface():
         
         # Send key (even level)
         elif key is not None:
-            resp = self.WriteReadRequest([UDSService.SECURITY_ACCESS, level] + list(key))
+            resp = self.WriteReadRequest([UDSService.SECURITY_ACCESS, level] + list(key), timeout=timeout_sa)
 
-            logger.info(f"Received seed: {resp['response']} => {resp['status']}")
+            logger.info(f"Security access : {resp['response']} => {resp['status']}")
 
             if(resp['status'] == True):
                 logger.info("Security access => Granted")
@@ -800,7 +800,7 @@ class UDSInterface():
             # Manually provide a 32-bit (4-byte) key
             key = bytes([0xFF, 0xFF, 0xFF, 0xFF])  # Replace with real OEM-calculated key
 
-        sc_result = self.SecurityAccess(level_key, key)
+        sc_result = self.SecurityAccess(level_key, key, timeout_sa=timeout_ms)
         
         if(sc_result['status'] != True):
             if (sa_debug == True):
